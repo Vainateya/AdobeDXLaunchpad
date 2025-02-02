@@ -3,7 +3,7 @@ from bs4 import BeautifulSoup
 import re
 from tqdm import tqdm
 
-from AdobeDXLaunchpad.courses.utils import *
+from utils import *
 
 class Scraper:
 
@@ -25,7 +25,13 @@ class Scraper:
         time = self._clean(rows[5].text)
         num_modules = int(self._clean(rows[6].text))
 
-        course_objectives = self._clean(soup.find('h4', string='Course objectives').find_next_sibling().text)
+        course_objectives_under = soup.find('h4', string='Course objectives').find_next_sibling()
+        modules_above = soup.find('h4', string='Course modules').find_previous_sibling()
+
+        course_objectives = self._clean(course_objectives_under.text)
+        ul = self._clean(modules_above.text)
+        if ul != course_objectives:
+            course_objectives += ' ' + ul
 
         div = soup.find('div', id='course-module-accordion-control')
         ms = div.find_all('div', class_='accordion-item')
