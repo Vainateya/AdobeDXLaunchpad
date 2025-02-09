@@ -85,9 +85,3 @@ class UserProfileManager:
         if os.path.exists(self.file_path):
             os.remove(self.file_path)
             self.profile = None
-    
-# Example Usage:
-if __name__ == "__main__":
-    user = UserProfileManager("user123")
-    user.update_profile(role="UX Designer", desired_skills=["Adobe XD", "Motion Design"])
-    print(user.get_profile())
