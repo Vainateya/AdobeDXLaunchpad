@@ -14,7 +14,6 @@ def _rem_big_spaces(text):
     text = text.replace("\n", "")
     return re.sub(r'\s+', ' ', text.strip()).strip()
 
-
 def get_jobs(soup: BeautifulSoup) -> List[str]:
     job_section = soup.find("strong", string="Job Titles")
     if job_section:
