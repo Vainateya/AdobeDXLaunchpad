@@ -9,7 +9,7 @@ class UserProfileManager:
     can later adapt for cloud storage solutions.
     """
     
-    PROFILE_DIR = "user_profiles"  # Directory to store user profile JSON files
+    PROFILE_DIR = "Adobe/AdobeDXLaunchpad/user_profiles"  # Directory to store user profile JSON files
 
     DEFAULT_PROFILE = {
         "role": None,
@@ -41,7 +41,7 @@ class UserProfileManager:
         
         if not os.path.exists(self.PROFILE_DIR):
             os.makedirs(self.PROFILE_DIR)
-        
+            
         if os.path.exists(self.file_path):
             self.profile = self._load_profile()
         else:
