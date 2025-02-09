@@ -9,6 +9,10 @@ from bs4 import BeautifulSoup
 import time
 import os
 
+OUT_FOLDER = "html"
+if not os.path.exists(OUT_FOLDER):
+    os.makedirs(OUT_FOLDER)
+
 # Step 1: Set up Selenium WebDriver
 service = Service(ChromeDriverManager().install())
 driver = webdriver.Chrome(service=service)
@@ -81,13 +85,13 @@ try:
             # Step 6: Scrape certification details
             soup = BeautifulSoup(driver.page_source, "html.parser")
             cert_title = soup.find("h1").text.strip() if soup.find("h1") else f"certification_{index}"
-            cert_filename = f"{cert_title.replace(' ', '_')}.html"
+            cert_path = os.path.join(OUT_FOLDER, f"{cert_title.strip()}.html")
             raw_html = driver.page_source
-            
-            with open(cert_filename, "w", encoding="utf-8") as f:
+
+            with open(cert_path, "w", encoding="utf-8") as f:
                 f.write(raw_html)
 
-            print(f"Saved: {cert_filename}")
+            print(f"Saved: {cert_path}")
 
             # Step 8: Go back to the certifications page
             driver.back()
