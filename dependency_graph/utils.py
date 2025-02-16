@@ -35,8 +35,17 @@ class Source:
         else:
             return self.job_role == other_source.job_role
         
-    def is_same_category_and_level_as(self, other_source):
-        return self.category == other_source.category and self.level == other_source.level
+    def has_same(self, other_source, *features):
+        if type(self) != type(other_source):
+            return False
+        for feature in features:
+            if feature == 'category' and self.category != other_source.category:
+                return False
+            elif feature == 'level' and self.level != other_source.level:
+                return False
+            elif feature == 'job_role' and not self.is_same_role_as(other_source):
+                return False
+        return True
         
     def _clean(self, s):
         return re.sub(r'[\s\n]+', ' ', s).strip()
