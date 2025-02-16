@@ -14,3 +14,4 @@ class Course(NamedTuple):
     num_modules: int
     objectives: str
     modules: List[Module]
+    all_text: str

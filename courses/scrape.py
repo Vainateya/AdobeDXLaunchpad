@@ -3,7 +3,7 @@ from bs4 import BeautifulSoup
 import re
 from tqdm import tqdm
 
-from utils import *
+from courses.utils import *
 
 class Scraper:
 
@@ -55,19 +55,20 @@ class Scraper:
 
             modules.append(Module(title=title, description=desc))
 
-        return Course(application, level, job_role, course_number, points, time, num_modules, course_objectives, modules)
+        return Course(application, level, job_role, course_number, points, time, num_modules, course_objectives, modules, soup.text)
 
-scraper = Scraper()
+if __name__ == '__main__':
+    scraper = Scraper()
 
-course_numbers = [
-    1043, 1045, 1046, 1047, 1048, 1049, 1050, 1054, 1055, 1056, 
-    1057, 1058, 1059, 1060, 1061, 1062, 1063, 1064, 1065, 1066, 
-    1067, 1068, 1069, 1221
-]
+    course_numbers = [
+        1043, 1045, 1046, 1047, 1048, 1049, 1050, 1054, 1055, 1056, 
+        1057, 1058, 1059, 1060, 1061, 1062, 1063, 1064, 1065, 1066, 
+        1067, 1068, 1069, 1221
+    ]
 
-courses = []
+    courses = []
 
-for n in tqdm(course_numbers):
-    courses.append(scraper.get_course(f'https://certification.adobe.com/courses/{n}'))
+    for n in tqdm(course_numbers):
+        courses.append(scraper.get_course(f'https://certification.adobe.com/courses/{n}'))
 
-print(len(courses))
+    print(len(courses))
