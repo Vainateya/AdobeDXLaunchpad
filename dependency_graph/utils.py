@@ -9,6 +9,12 @@ class Module(NamedTuple):
     title: str
     description: str
 
+def mod_to_dict(mod: Module):
+    return {mod.title: mod.description}
+
+def mod_to_text(mod: Module):
+    return mod.title + ": " + mod.description
+
 class Source:
     def __init__(self, category: str, level: str, job_role: str, display: str, all_text):
         self.category = category
@@ -19,6 +25,7 @@ class Source:
         self.course_levels = ['Foundations', 'Professional', 'Expert']
         self.certificate_levels = ['Professional', 'Expert', 'Master']
         self.job_roles = ['Developer', 'Business Practitioner', 'Architect', 'All']
+        self.type = "source"
 
     def __str__(self):
         return self.display
@@ -40,6 +47,19 @@ class Source:
         
     def _clean(self, s):
         return re.sub(r'[\s\n]+', ' ', s).strip()
+    
+    def to_dict(self):
+        return {
+            "type": self.type,
+            "category": self.category,
+            "level": self.level,
+            "job_role": self.job_role,
+            "display": self.display,
+            # "all_text": self.all_text
+        }
+
+    def to_text(self):
+        return "\n".join(f"{key}: {value}" for key, value in self.to_dict().items())
 
 class Course(Source):
     def __init__(self, link):
@@ -90,7 +110,8 @@ class Course(Source):
         self.num_modules = num_modules
         self.objectives = course_objectives
         self.modules = modules
-        
+        self.type = "course"
+
     def get_embedding(self, model):
         relevant_text = [self.objectives] + [m.description for m in self.modules]
         embs = model.embed_documents(relevant_text)
@@ -105,6 +126,20 @@ class Course(Source):
         else:
             return self.course_levels.index(other_source.level) == self.course_levels.index(self.level) + 1
     
+    def to_dict(self):
+        """Convert the Course object to a dictionary."""
+        course_dict = super().to_dict()
+        course_dict.update({
+            "course_number": self.course_number,
+            "points": self.points,
+            "time": self.time,
+            "num_modules": self.num_modules,
+            "objectives": self.objectives,
+            "modules": '\n'.join([mod_to_text(mod) for mod in self.modules])
+        })
+
+        return course_dict
+
 class Certificate(Source):
     def __init__(self, file_name):
         with open(file_name, "r", encoding="utf-8") as file:
@@ -130,7 +165,9 @@ class Certificate(Source):
         super().__init__(name, level, job_role, display, self.soup.text)
 
         self.prereq = ', '.join(self._get_min_exp_rec())
-        
+        self.type = "certificate"
+        self.details = self._get_exam_detail()
+
         study_materials = self._get_exam_sections()
         study_materials_parsed = []
 
@@ -222,23 +259,12 @@ class Certificate(Source):
             return study_dict
         else:
             return {}
-
-    def _get_exam_detail(self, detail: str):
-        key_element = self.soup.find("p", string=re.compile(f"^{detail}"))
-        if key_element:
-            value_element = key_element.find_next("p")
-            if value_element:
-                return value_element.text.strip()
-
-        return ""
-
-    def _get_all_exam_details(self):
-        exam_details_keys = [
-            "EXAM ID:", "LEVEL:", "COST:", "LANGUAGE(S):", "DELIVERY:", "PASSING SCORE:", "TIME LIMIT:"
-        ]
-        exam_details = {}
-
-        for key in exam_details_keys:
-            exam_details[key] = self.get_exam_detail(key)
-
-        return exam_details
+    
+    def to_dict(self):
+        """Convert the Certificate object to a dictionary."""
+        certificate_dict = super().to_dict()
+        certificate_dict.update({
+            "prerequisites": self.prereq,
+            "study_materials": '\n'.join(self.study_materials)
+        })
+        return certificate_dict
