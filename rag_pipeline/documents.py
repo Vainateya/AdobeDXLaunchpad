@@ -7,6 +7,8 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'dependency_graph')))
 from utils import *
 
+OPENAI_API_KEY = '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'
+
 class DocumentStore:
     def __init__(self, embedding_model: str = "text-embedding-ada-002", similarity_metric: str = "cosine"):
         self.client = chromadb.PersistentClient()
@@ -28,7 +30,11 @@ class DocumentStore:
     
     def generate_embedding(self, text: str) -> List[float]:
         """Generates an embedding for a given text using OpenAI's embedding model."""
-        response = openai.Embedding.create(input=[text], model=self.embedding_model)
+        response = openai.embeddings.create(
+            model=self.embedding_model, 
+            input=[text], 
+            api_key=OPENAI_API_KEY  # Replace with your actual API key
+        )
         return response['data'][0]['embedding']
     
     def process_source(self, source: Union['Course', 'Certificate']) -> Dict:
