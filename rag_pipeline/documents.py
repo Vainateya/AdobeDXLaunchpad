@@ -74,7 +74,7 @@ class DocumentStore:
             metadatas=[document["metadata"]]
         )
     
-    def query_documents(self, query_text: str, top_k: int = 3) -> List[Dict]:
+    def query_documents(self, query_text: str, top_k: int = 1) -> List[Dict]:
         """Retrieves the top K most relevant documents based on similarity search."""
         query_embedding = self.generate_embedding(query_text)
         results = self.collection.query(query_embeddings=[query_embedding], n_results=top_k)
@@ -86,6 +86,12 @@ class DocumentStore:
                 "metadata": results["metadatas"][0][i]
             })
         return retrieved_documents
+
+    def get_category_from_best_document(self, query_text):
+        query_embedding = self.generate_embedding(query_text)
+        results = self.collection.query(query_embeddings=[query_embedding], n_results=1)
+        
+        return results['metadatas'][0][0]['category']
     
     def delete_document(self, document_id: str):
         """Deletes a document from ChromaDB by ID."""
