@@ -27,8 +27,8 @@ const MessageList = ({className, messages}) => {
 		<div className={className}>
 			{messages.map((message, idx) => {
 				return (
-					<div key={idx} className={(message.from === 'user' ? "bg-gray-400" : "bg-blue-400") + " rounded shadow-lg p-2 mb-2"}>
-						<p>{message.text}</p>
+					<div key={idx} className={(message.from === 'user' ? "bg-gray-400" : "bg-blue-400") + " rounded shadow-lg p-2 mb-2"}
+						dangerouslySetInnerHTML={{ __html: message.text }}>
 					</div>
 				);
 			})}
