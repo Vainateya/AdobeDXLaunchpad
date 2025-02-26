@@ -90,9 +90,11 @@ def graph_to_2d_array(G):
     for node, row in row_map.items():
         if type(node) == Course:
             node_type = 'course'
+            desc = f'Course objectives: {node.objectives}'
         else:
             node_type = 'certificate'
-        graph_2d[row].append({'type': node_type, 'display': node.display})
+            desc = f'Prerequisites: {node.prereq}'
+        graph_2d[row].append({'type': node_type, 'display': node.display, 'description': desc})
 
     edges_2d = []
     for u, v in G.edges():
