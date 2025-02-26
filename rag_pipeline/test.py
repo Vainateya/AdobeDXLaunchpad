@@ -12,8 +12,9 @@ course_numbers = [
 ]
 
 # Initialize document store
-store = DocumentStore()
+store = DocumentStore(similarity_metric="cosine", storage_path="./chroma_storage")
 
+"""
 # Process Courses
 print("Processing Courses...")
 courses = []
@@ -41,10 +42,11 @@ for html in tqdm(os.listdir(certificate_htmls_location)):
         print(f"Error processing certificate {html}: {e}")
 
 print(f"Successfully added {len(certificates)} certificates.")
+"""
 
 # Run RAG pipeline to test retrieval & OpenAI response
 rag = BasicRAG(document_store=store)
-query = "What are the best courses for learning Adobe Illustrator?"
+query = "I'd like to learn more about the Adobe Commerce suite of courses and certificates. What is available for me?"
 response = rag.run_rag_pipeline(query)
 
 print("\nGenerated Response:")

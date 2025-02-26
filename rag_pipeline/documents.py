@@ -7,11 +7,10 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'dependency_graph')))
 from utils import *
 
-OPENAI_API_KEY = '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'
-
 class DocumentStore:
-    def __init__(self, embedding_model: str = "text-embedding-ada-002", similarity_metric: str = "cosine"):
-        self.client = chromadb.PersistentClient()
+    def __init__(self, embedding_model: str = "text-embedding-ada-002", similarity_metric: str = "cosine", storage_path: str = ".chroma_db"):
+        self.storage_path = storage_path  # Path where ChromaDB will store data
+        self.client = chromadb.PersistentClient(path=self.storage_path)
         self.similarity_metric = similarity_metric  # Store the similarity setting
         self.collection = self.client.get_or_create_collection(
             name="learning_documents",
@@ -33,9 +32,8 @@ class DocumentStore:
         response = openai.embeddings.create(
             model=self.embedding_model, 
             input=[text], 
-            api_key=OPENAI_API_KEY  # Replace with your actual API key
         )
-        return response['data'][0]['embedding']
+        return response.data[0].embedding
     
     def process_source(self, source: Union['Course', 'Certificate']) -> Dict:
         """Extracts relevant text and metadata from Course or Certificate objects."""
@@ -48,7 +46,7 @@ class DocumentStore:
                 "level": source.level,
                 "job_role": source.job_role,
                 "objectives": source.objectives,
-                "modules": [m.title for m in source.modules]
+                "modules": ", ".join([m.title for m in source.modules]) 
             }
         elif isinstance(source, Certificate):
             text = f"{source.prereq} " + " ".join(source.study_materials)
@@ -59,7 +57,7 @@ class DocumentStore:
                 "level": source.level,
                 "job_role": source.job_role,
                 "prereq": source.prereq,
-                "study_materials": source.study_materials
+                "study_materials": "; ".join(source.study_materials)  # ✅ Convert list to a string
             }
         else:
             raise ValueError("Unsupported document type.")
@@ -76,7 +74,7 @@ class DocumentStore:
             metadatas=[document["metadata"]]
         )
     
-    def query_documents(self, query_text: str, top_k: int = 5) -> List[Dict]:
+    def query_documents(self, query_text: str, top_k: int = 3) -> List[Dict]:
         """Retrieves the top K most relevant documents based on similarity search."""
         query_embedding = self.generate_embedding(query_text)
         results = self.collection.query(query_embeddings=[query_embedding], n_results=top_k)
