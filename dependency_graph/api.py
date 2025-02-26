@@ -14,6 +14,7 @@ import streamlit as st
 import graphviz as graphviz
 
 from utils import *
+from rag import *
 
 # embedding_model = HuggingFaceEmbeddings(
 #     model_name="thenlper/gte-small",
@@ -47,6 +48,9 @@ app = Flask(__name__)
 CORS(app)
 app.config['CACHE_TYPE'] = 'simple'
 cache = Cache(app)
+
+store = DocumentStore(similarity_metric="cosine", storage_path="./chroma_storage")
+rag = BasicRAG(document_store=store)
 
 def create_graph(course_name):
     H = nx.DiGraph()
@@ -106,10 +110,12 @@ def graph_to_2d_array(G):
 @app.route('/api/get_graph', methods=['POST'])
 def get_graph():
     data = request.get_json()
-    course_name = data['category']
-    G = create_graph(course_name)
+    message = data['category']
+    
+    response, category = rag.run_rag_pipeline(message, courses, certificates)
+    G = create_graph(category)
     nodes, edges = graph_to_2d_array(G)
-    return jsonify({'nodes': nodes, 'edges': edges, 'message': 'Graph displayed'})
+    return jsonify({'nodes': nodes, 'edges': edges, 'message': response})
     # Perform any server-side actions here
 
 if __name__ == '__main__':
