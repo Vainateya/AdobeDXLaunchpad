@@ -248,5 +248,5 @@ function App() {
     </div>
   );
 }
-
+App.displayName = "App"; 
 export default App;
