@@ -45,11 +45,19 @@ for html in tqdm(os.listdir(certificate_htmls_location)):
     certificates.append(certificate)
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, supports_credentials=True)
 app.config['CACHE_TYPE'] = 'simple'
 cache = Cache(app)
 
 store = DocumentStore(similarity_metric="cosine", storage_path="./chroma_storage")
+if store.collection.count() == 0:
+    print("No documents found in ChromaDB. Re-adding documents...")
+    for course in courses:
+        store.add_document(course)
+    for certificate in certificates:
+        store.add_document(certificate)
+    print(f"Total documents after reloading: {store.collection.count()}")
+
 rag = BasicRAG(document_store=store)
 
 def create_graph(course_name):

@@ -1,4 +1,4 @@
-from tqdm import tqdm
+﻿from tqdm import tqdm
 import os
 from documents import DocumentStore
 from utils import Course, Certificate
@@ -21,7 +21,7 @@ courses = []
 for course_id in tqdm(course_numbers):
     try:
         course = Course(f'https://certification.adobe.com/courses/{course_id}')
-        # store.add_document(course)  # Store course in ChromaDB
+        store.add_document(course)  # Store course in ChromaDB
         courses.append(course)
     except Exception as e:
         print(f"Error processing course {course_id}: {e}")
@@ -36,7 +36,7 @@ print("Processing Certificates...")
 for html in tqdm(os.listdir(certificate_htmls_location)):
     try:
         certificate = Certificate(f'{certificate_htmls_location}/{html}')
-        # store.add_document(certificate)  # Store certificate in ChromaDB
+        store.add_document(certificate)  # Store certificate in ChromaDB
         certificates.append(certificate)
     except Exception as e:
         print(f"Error processing certificate {html}: {e}")
