@@ -1,6 +1,6 @@
 from openai import OpenAI
 from documents import *
-from AdobeDXLaunchpad.dependency_graph.graph_utils import *
+from graph_utils import *
 from utils import *
 
 class BasicRAG:
@@ -33,7 +33,7 @@ class BasicRAG:
         G = create_graph(category, courses, certificates)
         nodes, edges = graph_to_2d_array(G)
         context = get_full_string(nodes, edges)
-        return context
+        return context, category
 
     def generate_response(self, query, documents: str, graph: str):
         # Construct the prompt
@@ -106,9 +106,9 @@ class BasicRAG:
     def run_rag_pipeline(self, query: str, courses, certificates, top_k: int = 5) -> str:
         """Runs the full RAG pipeline: retrieves documents and generates a response."""
         retrieved_docs = self.retrieve_documents(query, top_k)
-        graph = self.retrieve_graph(query, courses, certificates)
+        graph, category = self.retrieve_graph(query, courses, certificates)
         response = self.generate_response(query, retrieved_docs, graph)
-        return response
+        return response, category
 
     def run_graph_rag_pipeline(self, query, courses, certificates):
         category = self.get_category(query)
