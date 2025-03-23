@@ -14,6 +14,7 @@ import streamlit as st
 import graphviz as graphviz
 
 from utils import *
+from graph_utils import *
 from rag import *
 
 # embedding_model = HuggingFaceEmbeddings(
@@ -60,68 +61,13 @@ if store.collection.count() == 0:
 
 rag = BasicRAG(document_store=store)
 
-def create_graph(course_name):
-    H = nx.DiGraph()
-
-    sources = [node for node in courses + certificates if node.category == course_name]
-
-    for src in sources:
-        H.add_node(src)
-
-    for i, src1 in enumerate(sources):
-        for j, src2 in enumerate(sources):
-            if i == j:
-                continue
-            if src1.is_prereq_to(src2):
-                H.add_edge(src1, src2, color='black')
-    return H
-
-def graph_to_2d_array(G):
-    root_nodes = [n for n in G.nodes if G.in_degree(n) == 0]
-
-    row_map = {}
-    queue = [(node, 0) for node in root_nodes]
-
-    while queue:
-        node, row = queue.pop(0)
-
-        if node in row_map:
-            row = max(row, row_map[node])
-        row_map[node] = row
-
-        for child in G.successors(node):
-            if child in row_map:
-                row_map[child] = max(row_map[child], row + 1)
-            else:
-                row_map[child] = row + 1
-            queue.append((child, row_map[child]))
-
-    max_row = max(row_map.values())
-    graph_2d = [[] for _ in range(max_row + 1)]
-
-    for node, row in row_map.items():
-        if type(node) == Course:
-            node_type = 'course'
-            desc = f'Course objectives: {node.objectives}'
-        else:
-            node_type = 'certificate'
-            desc = f'Prerequisites: {node.prereq}'
-        graph_2d[row].append({'type': node_type, 'display': node.display, 'description': desc})
-
-    edges_2d = []
-    for u, v in G.edges():
-        if row_map[u] < row_map[v]:  # Ensure edges go downward
-            edges_2d.append({'from': u.display, 'to': v.display})
-
-    return graph_2d, edges_2d
-
 @app.route('/api/get_graph', methods=['POST'])
 def get_graph():
     data = request.get_json()
     message = data['category']
     
     response, category = rag.run_rag_pipeline(message, courses, certificates)
-    G = create_graph(category)
+    G = get_specific_graph(courses, certificates, relevant_roles = [], info_level = 'low', starting_node = {})
     nodes, edges = graph_to_2d_array(G)
     return jsonify({'nodes': nodes, 'edges': edges, 'message': response})
     # Perform any server-side actions here

@@ -1,21 +1,80 @@
 import networkx as nx
+from collections import deque
 from utils import *
 
-def create_graph(course_name, courses, certificates):
-    H = nx.DiGraph()
+# def create_graph(course_name, courses, certificates):
+#     H = nx.DiGraph()
 
-    sources = [node for node in courses + certificates if node.category == course_name]
+#     sources = [node for node in courses + certificates if node.category == course_name]
+
+#     for src in sources:
+#         H.add_node(src)
+
+#     for i, src1 in enumerate(sources):
+#         for j, src2 in enumerate(sources):
+#             if i == j:
+#                 continue
+#             if src1.is_prereq_to(src2):
+#                 H.add_edge(src1, src2, color='black')
+#     return H
+
+# Example parameters
+# 
+# relevant_roles = ['All', 'Business Practitioner']
+# info_level = 'medium' 
+# starting_node = {
+#     'category': 'Adobe Commerce',
+#     'level': 'Foundations',
+#     'type': Course
+# }
+# job_role_query = "I want to primarily work with digital marketing, such as advertising."
+
+def get_specific_graph(courses, certificates, relevant_roles, info_level, starting_node):
+    G = nx.DiGraph()
+    queue = deque()
+    sources = [i for i in courses + certificates if i.job_role in relevant_roles]
+
+    # first, we find the root node(s)
 
     for src in sources:
-        H.add_node(src)
+        if src.category == starting_node['category'] and src.level == starting_node['level'] and type(src) == starting_node['type']:
+            queue.append(src)
+            G.add_node(src)
 
-    for i, src1 in enumerate(sources):
-        for j, src2 in enumerate(sources):
-            if i == j:
-                continue
-            if src1.is_prereq_to(src2):
-                H.add_edge(src1, src2, color='black')
-    return H
+    # now that we have the root node, we find children up to the user-specified level
+
+    if info_level == 'low':
+        pass
+
+    if info_level == 'medium':
+        certificate_in_graph = False
+        while queue and not certificate_in_graph:
+            node = queue.popleft()
+
+            for i, src in enumerate(sources):
+                if node.is_prereq_to(src):
+                    if src not in G:
+                        G.add_node(src)
+                        queue.append(src)
+                        if type(src) == Certificate:
+                            certificate_in_graph = True
+                    G.add_edge(node, src)
+
+    if info_level == 'high':
+        while queue:
+            node = queue.popleft()
+
+            for i, src in enumerate(sources):
+                if node.is_prereq_to(src):
+                    if src not in G:
+                        G.add_node(src)
+                        queue.append(src)
+                    G.add_edge(node, src)
+
+
+    pos = nx.circular_layout(G)
+    nx.draw(G, pos, with_labels=True, font_size=6, node_size=40)
+    return G
 
 def graph_to_2d_array(G):
     root_nodes = [n for n in G.nodes if G.in_degree(n) == 0]
@@ -47,7 +106,7 @@ def graph_to_2d_array(G):
         else:
             node_type = 'certificate'
             desc = f'Prerequisites: {node.prereq}'
-        graph_2d[row].append({'type': node_type, 'display': node.display, 'description': desc})
+        graph_2d[row].append({'type': node_type, 'display': node.display, 'data': node.to_dict()})
 
     edges_2d = []
     for u, v in G.edges():
