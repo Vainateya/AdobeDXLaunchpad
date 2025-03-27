@@ -16,12 +16,13 @@ def mod_to_text(mod: Module):
     return mod.title + ": " + mod.description
 
 class Source:
-    def __init__(self, category: str, level: str, job_role: str, display: str, all_text):
+    def __init__(self, category: str, level: str, job_role: str, display: str, all_text: str, link: str = ''):
         self.category = category
         self.level = level
         self.job_role = job_role
         self.display = display
         self.all_text = all_text
+        self.link = link
         self.course_levels = ['Foundations', 'Professional', 'Expert']
         self.certificate_levels = ['Professional', 'Expert', 'Master']
         self.job_roles = ['Developer', 'Business Practitioner', 'Architect', 'All']
@@ -64,6 +65,7 @@ class Source:
             "level": self.level,
             "job_role": self.job_role,
             "display": self.display,
+            "link": self.link
             # "all_text": self.all_text
         }
 
@@ -112,7 +114,7 @@ class Course(Source):
 
             modules.append(Module(title=title, description=desc))
 
-        super().__init__(application, level, job_role, display, soup.text)
+        super().__init__(application, level, job_role, display, soup.text, link)
         self.course_number = course_number
         self.points = points
         self.time = time
@@ -171,7 +173,21 @@ class Certificate(Source):
 
         display = self._clean(self.soup.find('h1', class_='text-white').text)
         
-        super().__init__(name, level, job_role, display, self.soup.text)
+        try:
+            base_tag = self.soup.find('base', href=True)
+            if base_tag:
+                href = base_tag['href'].strip('/')
+                if href.startswith("certification/"):
+                    self.link = f"https://certification.adobe.com/{href}"
+                else:
+                    self.link = f"https://certification.adobe.com/certification/{href}"
+            else:
+                self.link = None
+        except Exception:
+            self.link = None
+
+        
+        super().__init__(name, level, job_role, display, self.soup.text, link=self.link)
 
         self.prereq = ', '.join(self._get_min_exp_rec())
         self.type = "certificate"
