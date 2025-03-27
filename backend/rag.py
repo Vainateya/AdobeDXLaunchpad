@@ -30,10 +30,15 @@ class BasicRAG:
 
     def retrieve_graph(self, query, courses, certificates, top_k = 1):
         category = self.document_store.get_category_from_best_document(query)
-        G = create_graph(category, courses, certificates)
+        starting_node = {
+            'category': 'Adobe Commerce',
+            'level': 'Foundations',
+            'type': Course
+        }
+        G = get_specific_graph(courses, certificates, relevant_roles = ['All', 'Business Practitioner'], info_level = 'medium', starting_node = starting_node)
         nodes, edges = graph_to_2d_array(G)
         context = get_full_string(nodes, edges)
-        return context, category
+        return G, context, category
 
     def generate_response(self, query, documents: str, graph: str):
         # Construct the prompt
@@ -106,9 +111,9 @@ class BasicRAG:
     def run_rag_pipeline(self, query: str, courses, certificates, top_k: int = 5) -> str:
         """Runs the full RAG pipeline: retrieves documents and generates a response."""
         retrieved_docs = self.retrieve_documents(query, top_k)
-        graph, category = self.retrieve_graph(query, courses, certificates)
-        response = self.generate_response(query, retrieved_docs, graph)
-        return response, category
+        graph, context, category = self.retrieve_graph(query, courses, certificates)
+        response = self.generate_response(query, retrieved_docs, context)
+        return response, category, graph
 
     def run_graph_rag_pipeline(self, query, courses, certificates):
         category = self.get_category(query)
