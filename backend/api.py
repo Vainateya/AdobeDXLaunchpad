@@ -39,7 +39,7 @@ for n in tqdm(course_numbers):
 
 print(len(courses))
 
-certificate_htmls_location = 'certificate_htmls'
+certificate_htmls_location = '../dependency_graph/certificate_htmls'
 
 for html in tqdm(os.listdir(certificate_htmls_location)):
     certificate = Certificate(f'{certificate_htmls_location}/{html}')
@@ -66,9 +66,8 @@ def get_graph():
     data = request.get_json()
     message = data['category']
     
-    response, category = rag.run_rag_pipeline(message, courses, certificates)
-    G = get_specific_graph(courses, certificates, relevant_roles = [], info_level = 'low', starting_node = {})
-    nodes, edges = graph_to_2d_array(G)
+    response, category, graph = rag.run_rag_pipeline(message, courses, certificates)
+    nodes, edges = graph_to_2d_array(graph)
     return jsonify({'nodes': nodes, 'edges': edges, 'message': response})
     # Perform any server-side actions here
 

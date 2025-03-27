@@ -139,7 +139,7 @@ def flatten(l):
 def display_nodes(nodes):
     res = 'The relevant sources (nodes) are as follows: \n'
     for src in flatten(nodes):
-        res += f'{src["type"]} - {src["display"]} - {src["description"]}\n'
+        res += f'{src["type"]} - {src["display"]} - {src["data"]}\n'
     return res
 
 def display_edges(edges):
