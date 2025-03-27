@@ -33,17 +33,31 @@ course_numbers = [
     1067, 1068, 1069, 1221
 ]
 
-for n in tqdm(course_numbers):
-    new_course = Course(f'https://certification.adobe.com/courses/{n}')
-    courses.append(new_course)
-
-print(len(courses))
-
 certificate_htmls_location = '../dependency_graph/certificate_htmls'
 
-for html in tqdm(os.listdir(certificate_htmls_location)):
-    certificate = Certificate(f'{certificate_htmls_location}/{html}')
-    certificates.append(certificate)
+save_folder = "pickels"
+certificates_save_location = os.path.join(save_folder, "certificates.pkl")
+courses_save_location = os.path.join(save_folder, "courses.pkl")
+
+if not os.path.exists(courses_save_location) or not os.path.exists(certificates_save_location):
+    print("Scraping resources...")
+    if not os.path.exists(save_folder):
+        os.makedirs(save_folder)
+    
+    for n in tqdm(course_numbers):
+        new_course = Course(f'https://certification.adobe.com/courses/{n}')
+        courses.append(new_course)
+    save_sources_pickle(courses, courses_save_location)
+
+    for html in tqdm(os.listdir(certificate_htmls_location)):
+        certificate = Certificate(f'{certificate_htmls_location}/{html}')
+        certificates.append(certificate)
+    save_sources_pickle(certificates, certificates_save_location)
+else:
+    print("Loading resources...")
+    certificates = load_sources_pickle(certificates_save_location)
+    courses = load_sources_pickle(courses_save_location)
+
 
 app = Flask(__name__)
 CORS(app, supports_credentials=True)
@@ -67,7 +81,10 @@ def get_graph():
     message = data['category']
     
     response, category, graph = rag.run_rag_pipeline(message, courses, certificates)
-    nodes, edges = graph_to_2d_array(graph)
+    if len(graph) > 0:
+        nodes, edges = graph_to_2d_array(graph)
+    else:
+        nodes, edges = [], []
     return jsonify({'nodes': nodes, 'edges': edges, 'message': response})
     # Perform any server-side actions here
 

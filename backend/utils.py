@@ -4,7 +4,9 @@ from bs4 import BeautifulSoup
 import numpy as np
 import re
 import os
-        
+import pickle
+import json
+
 class Module(NamedTuple):
     title: str
     description: str
@@ -14,6 +16,15 @@ def mod_to_dict(mod: Module):
 
 def mod_to_text(mod: Module):
     return mod.title + ": " + mod.description
+
+def save_sources_pickle(sources, filename):
+    with open(filename, 'wb') as f:
+        pickle.dump(sources, f)
+
+def load_sources_pickle(filename):
+    with open(filename, 'rb') as f:
+        sources = pickle.load(f)
+    return sources
 
 class Source:
     def __init__(self, category: str, level: str, job_role: str, display: str, all_text):

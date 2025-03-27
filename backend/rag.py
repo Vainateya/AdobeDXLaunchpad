@@ -5,6 +5,31 @@ from utils import *
 import ast
 import inspect
 
+COURSE_LEVELS = ['Foundations', 'Professional', 'Expert']
+CERT_LEVELS = ['Professional', 'Expert', 'Master']
+
+import re
+import ast
+
+def extract_resources(text):
+    """
+    Parameters:
+        text (str): The body of text containing the substring.
+        
+    Returns:
+        list: The extracted list of strings, or None if not found.
+    """
+    pattern = r"<p><strong>Resources Listed</strong>:\s*(\[[^\]]*\])</p>"
+
+    match = re.search(pattern, text)
+    if match:
+        list_str = match.group(1)
+        # Optionally, convert the string representation of the list to an actual list:
+        resources = ast.literal_eval(list_str)
+        return resources
+    else:
+        return []
+
 class BasicRAG:
     """
     A default RAG (Retrieval-Augmented Generation) pipeline that retrieves relevant documents 
@@ -43,7 +68,13 @@ class BasicRAG:
         #     'type': Course
         # }
         # G = get_specific_graph(courses, certificates, relevant_roles = ['All', 'Business Practitioner'], info_level = 'medium', starting_node = starting_node)
-        G = get_specific_graph(courses, certificates, relevant_roles = graph_args[0], info_level = graph_args[1], starting_node = graph_args[2])
+        G = get_specific_graph(courses, certificates, relevant_roles = graph_args[0], info_level = graph_args[1], starting_nodes = graph_args[2])
+        print("G", len(G), graph_args)
+        if len(G) == 0:
+            graph_args[0] = ["All"]
+            G = get_specific_graph(courses, certificates, relevant_roles = graph_args[0], info_level = graph_args[1], starting_nodes = graph_args[2])
+            print("REDO: G", len(G), graph_args)
+
         nodes, edges = graph_to_2d_array(G)
         context = get_full_string(nodes, edges)
         return G, context, category
@@ -74,7 +105,7 @@ class BasicRAG:
                 chat_history_text += f"Assistant: {entry['content']}\n"
         return chat_history_text
 
-    def generate_response(self, query, documents: str, graph: str):
+    def generate_response(self, query, documents: str):
         # Construct the prompt
         # Structured prompt with HTML output
 
@@ -101,9 +132,6 @@ class BasicRAG:
             <h2>Retrieved Course Information:</h2>
             <p>{documents}</p>
             
-            <h2>Course Dependency Graph:</h2>
-            <p>{graph}</p>
-            
             <p><strong>Instructions:</strong> Based on the query, follow the appropriate role:</p>
             
             <h3>1 Career Counselor Role</h3>
@@ -122,13 +150,15 @@ class BasicRAG:
 
             <h3>3 Career Planner Role</h3>
             <p>If the user asks for a <strong>course trajectory</strong>, use both the <strong>documents</strong> and the <strong>graph</strong> to create a step-by-step learning plan.</p>
-            <p>Ensure the plan follows logical <strong>prerequisite dependencies</strong>, starting with foundational courses and leading to expert certifications.</p>
+            <p>Ensure the plan follows logical <strong>prerequisite dependencies</strong>, starting with foundational courses and leading to expert certifications. <strong>ONLY</strong> refer to courses from the Retrieved Course Information section</p> 
 
             <h2> Output Format: HTML</h2>
             <ul>
+                <li>Print which Role you are acting under.</li>
                 <li>Wrap paragraphs in <code>&lt;p&gt;</code></li>
                 <li>Use <code>&lt;h2&gt;</code> and <code>&lt;h3&gt;</code> for sections</li>
                 <li>Use <code>&lt;ul&gt;&lt;li&gt;</code> for lists</li>
+                <li>End any responses with a list of the course and certification names mentioned in your response up until now, formatted as "<p><strong>Resources Listed</strong>:['Resource 1', 'Resource 2', ...]</p>" If no resources are listed, output <p><strong>Resources Listed</strong>:[]</p>" </li>
             </ul>
             
             <h2> Generate Your Response Below:</h2>
@@ -145,11 +175,13 @@ class BasicRAG:
                 temperature=0.7
             )
             assistant_response = response.choices[0].message.content
+            resource_names = extract_resources(assistant_response)
+            # print("assistant_response", assistant_response)
+            # print("resource_names", resource_names)
             self.add_to_history("assistant", assistant_response)
-            return assistant_response
+            return assistant_response, resource_names
         except Exception as e:
             return f"An error occurred while generating a response: {e}"
-        
 
     def generate_graph_args(self, query:str):
         chat_history_text = self.format_chat_history(html=False)
@@ -162,16 +194,14 @@ class BasicRAG:
             Previous Conversation: "{chat_history_text}"
             User Query: "{query}"
             Instructions: Using the Previous Conversation and User Query, output three metrics - job roles and information level. 
-            For job roles, select the roles the user is interested in across "Developer, Business Practitioner, Architect, or 'All'. 
+            For job roles, there are four options. Business Practitioners are responsible for designing, executing, and managing marketing campaigns using Adobe Experience Cloud solutions. They should have a foundational understanding of Adobe’s digital marketing solutions, as well as experience in marketing and advertising. The Business Practitioner certification validates their ability to effectively use Adobe’s digital marketing solutions to achieve business objectives. Developers are responsible for implementing and integrating Adobe Experience Cloud solutions into an organization’s technology stack. They should have experience in software development and proficiency in web technologies, such as HTML, CSS, JavaScript, and RESTful APIs. The Developer certification validates their ability to effectively implement and customize Adobe’s digital marketing solutions to meet business requirements. Architects are responsible for designing and implementing enterprise-grade solutions using Adobe Experience Cloud solutions. All indicates they may be interested in each of the previous three roles. Select the roles the user is interested in across "Developer, Business Practitioner, Architect, or 'All'.
+ 
             For information level, select how descriptive you think the user wants the results to be from "low", "medium", "high".
-            For category, select which category relates best to the user's query from the following options: "All", Adobe Analytics", "Adobe Commerce", "Adobe Customer Journey Analytics", "Adobe Experience Cloud", "Adobe Experience Manager", "Adobe Experience Platform", "Adobe Firefly", "Adobe GenStudio", "Adobe Journey Optimizer", "Adobe Marketo Engage", "Adobe Mix Modeler", "Adobe Real-Time CDP", "Adobe Target", "Adobe Workfront"
-            For skill level, select which skill level corresponds to the user's current skill level the user would like begin with, 0 for beginning with the fundamentals, 1 for skipping to intermediete and 2 for skipping to expert: 0,1,2
-            For resource, select which type of resource the user would be the most interested in, either a course to learn the fundamentals, or a certification, amongst the following options: "Course", "Certification"
 
-            Output your answer in the form [JOB_ROLES, INFORMATION_LEVEL, CATEGORY, SKILL_LEVEL, RESOURCE], where JOB_ROLES is a list of strings, INFORMATION_LEVEL is a string, CATEGORY is a string, SKILL_LEVEL is an integer, and RESOURCE is a string.
+            Output your answer in the form [JOB_ROLES, INFORMATION_LEVEL], where JOB_ROLES is a list of strings, INFORMATION_LEVEL is a string.
 
-            Example Output: [["All"], "medium", "Adobe Commerce", 1, "Certification"]
-            Example Output: [["Developer", "Architect"], "high", "Adobe Analytics", 0, "Course"]
+            Example Output: [["All"], "medium"]
+            Example Output: [["Developer", "Architect"], "high"]
 
             Output:
             """
@@ -187,39 +217,26 @@ class BasicRAG:
             )
             assistant_response = response.choices[0].message.content
             parsed_response = ast.literal_eval(assistant_response)
-
-            job_roles = parsed_response[0]
-            info_level = parsed_response[1]
-            category = parsed_response[2]
-            level_num = parsed_response[3]
-            type_str = parsed_response[4]
-
-            if type_str == "Course":
-                level = ['Foundations', 'Professional', 'Expert'][level_num]
-            else:
-                level = ['Professional', 'Expert', 'Master'][level_num]
-
-            start_node = {
-                "category": category,
-                "level": level,
-                "type": Course if type_str == "Course" else Certificate,
-            }
-
-            graph_args = [job_roles, info_level, start_node]
-
-            print("prompt", prompt)
-            print("assistant_response", graph_args)
-
-            return graph_args
+            print("parsed_response", parsed_response)
+            return parsed_response
         except Exception as e:
             return f"An error occurred while generating a response: {e}"
     
     def run_rag_pipeline(self, query: str, courses, certificates, top_k: int = 5) -> str:
         """Runs the full RAG pipeline: retrieves documents and generates a response."""
         retrieved_docs = self.retrieve_documents(query, top_k)
-        graph_args = self.generate_graph_args(query)
-        graph, context, category = self.retrieve_graph(query, courses, certificates, graph_args)
-        response = self.generate_response(query, retrieved_docs, context)
+        response, resource_names = self.generate_response(query, retrieved_docs)
+        max_resources = 5
+        if resource_names:
+            job_roles, info_level = self.generate_graph_args(query)
+            if info_level != "high":
+                max_resources = 1
+            
+            graph_args = [job_roles, info_level, resource_names[:max_resources]]
+            graph, context, category = self.retrieve_graph(query, courses, certificates, graph_args)
+        else:
+            graph = nx.DiGraph()
+            category = None
         return response, category, graph
 
     def run_graph_rag_pipeline(self, query, courses, certificates):
