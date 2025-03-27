@@ -29,7 +29,7 @@ from utils import *
 # }
 # job_role_query = "I want to primarily work with digital marketing, such as advertising."
 
-def get_specific_graph(courses, certificates, relevant_roles, info_level, starting_node):
+def get_specific_graph(courses, certificates, relevant_roles, info_level, starting_nodes):
     """
     Create a directed graph of courses and certificates based on prerequisite relationships.
 
