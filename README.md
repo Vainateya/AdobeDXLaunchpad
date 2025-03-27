@@ -12,3 +12,63 @@ Key Challenges:
 - The platform needs a tailored approach to create learning trajectories, making it easier for users to connect offerings to their aspirations
 
 - The platform should foster inclusivity and engagement by recommending resources that align with a student’s diverse intellectual background and current knowledge
+
+# Adobe Course Dependency Graph (RAG Pipeline)
+
+This project is a **Retrieval-Augmented Generation (RAG) pipeline** that processes Adobe courses and certificates, stores them in a ChromaDB database, and generates responses and course trajectories based on user input. 
+
+It includes a **Flask API backend** and a **React (Next.js) frontend**, allowing users to interact with the system through a web interface.
+
+---
+
+## 🚀 **Getting Started**
+
+### **1️⃣ Set Up the Environment**
+#### **🔹 Install Conda (If Not Installed)**
+If you don’t have Conda installed, download and install **Miniconda** or **Anaconda**:
+- [Miniconda](https://docs.conda.io/en/latest/miniconda.html)
+- [Anaconda](https://www.anaconda.com/products/distribution)
+
+#### **🔹 Create and Activate the Conda Environment**
+Use the provided `environment.yml` file to create the environment:
+```bash
+conda env create -f environment.yml
+conda activate RAG
+```
+### **2️⃣ Set Up the Backend**
+**🔹 Navigate to the Backend Directory**
+```
+cd dependency_graph
+```
+**🔹 Run the API**
+```
+python api.py
+```
+This should start the Flask server at:
+```
+http://127.0.0.1:5000
+```
+### **3️⃣ Setup the Frontend (Next.js React App)**
+
+**In a new terminal, Navigate to the Frontend Directory**
+```
+cd chatbot
+```
+**Install frontend dependencies**
+```
+npm install
+```
+**Build the Next.js App**
+```
+npm run build
+```
+**Start the Frontend**
+```
+npm start
+```
+**Open the frontend**  
+Visit:
+```
+http://localhost:3000
+```
+And feel free to interact with the chatbot!

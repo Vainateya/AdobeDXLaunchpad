@@ -175,7 +175,7 @@ class Certificate(Source):
 
         self.prereq = ', '.join(self._get_min_exp_rec())
         self.type = "certificate"
-        self.details = self._get_exam_detail()
+        self.details = self._get_all_exam_details()
 
         study_materials = self._get_exam_sections()
         study_materials_parsed = []
@@ -268,6 +268,26 @@ class Certificate(Source):
             return study_dict
         else:
             return {}
+        
+    def _get_exam_detail(self, detail: str):
+        key_element = self.soup.find("p", string=re.compile(f"^{detail}"))
+        if key_element:
+            value_element = key_element.find_next("p")
+            if value_element:
+                return value_element.text.strip()
+
+        return ""
+
+    def _get_all_exam_details(self):
+        exam_details_keys = [
+            "EXAM ID:", "LEVEL:", "COST:", "LANGUAGE(S):", "DELIVERY:", "PASSING SCORE:", "TIME LIMIT:"
+        ]
+        exam_details = {}
+
+        for key in exam_details_keys:
+            exam_details[key] = self._get_exam_detail(key)
+
+        return exam_details
     
     def to_dict(self):
         """Convert the Certificate object to a dictionary."""
