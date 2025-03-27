@@ -30,6 +30,20 @@ from utils import *
 # job_role_query = "I want to primarily work with digital marketing, such as advertising."
 
 def get_specific_graph(courses, certificates, relevant_roles, info_level, starting_node):
+    """
+    Create a directed graph of courses and certificates based on prerequisite relationships.
+
+    Parameters:
+        courses (list): List of course objects.
+        certificates (list): List of certificate objects.
+        relevant_roles (list): List of job roles to filter the courses and certificates.
+        info_level (str): Level of graph expansion ('low', 'medium', or 'high').
+        starting_node (dict): Dictionary with keys 'category', 'level', and 'type' specifying the starting node.
+
+    Returns:
+        networkx.DiGraph: A directed graph representing the prerequisite relationships.
+    """
+
     G = nx.DiGraph()
     queue = deque()
     sources = [i for i in courses + certificates if i.job_role in relevant_roles]
