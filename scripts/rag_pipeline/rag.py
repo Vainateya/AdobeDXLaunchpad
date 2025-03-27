@@ -13,6 +13,11 @@ class BasicRAG:
         self.document_store = document_store
         self.model = model
         self.client = OpenAI()
+        self.chat_history = [] 
+    
+    def add_to_history(self, role: str, content: str):
+        """Appends a new entry to the chat history."""
+        self.chat_history.append({"role": role, "content": content})
     
     def retrieve_documents(self, query: str, top_k: int = 5):
         """Fetches the top-k most relevant documents from the document store and formats metadata."""
@@ -34,10 +39,23 @@ class BasicRAG:
         nodes, edges = graph_to_2d_array(G)
         context = get_full_string(nodes, edges)
         return context
+    
+    def format_chat_history(self) -> str:
+        """Formats the chat history for including in the prompt."""
+        chat_history_text = ""
+        for entry in self.chat_history:
+            if entry["role"] == "user":
+                chat_history_text += f"<p><strong>User:</strong> {entry['content']}</p>\n"
+            elif entry["role"] == "assistant":
+                chat_history_text += f"<p><strong>Assistant:</strong> {entry['content']}</p>\n"
+        return chat_history_text
 
     def generate_response(self, query, documents: str, graph: str):
         # Construct the prompt
         # Structured prompt with HTML output
+
+        chat_history_text = self.format_chat_history()
+
         prompt = f"""
 
             YOU ARE AN ADOBE COURSE/CERTIFICATE RECCOMENDATION BOT. 
@@ -50,6 +68,9 @@ class BasicRAG:
                 <li>If the query <strong>asks about courses</strong> or Adobe offerings, act as a <strong>Course Explainer</strong>. Summarize the relevant courses from the retrieved <strong>documents</strong> and recommend the <strong>best fit course</strong> for the user's needs.</li>
                 <li>If the user <strong>wants a structured learning plan</strong>, act as a <strong>Career Planner</strong>. Use both <strong>documents</strong> and the <strong>graph</strong> to outline a <strong>logical learning trajectory</strong> with prerequisites.</li>
             </ul>
+
+            <h2>Previous Conversation:</h2>
+            {chat_history_text}
             
             <h2>User Query:</h2>
             <p>{query}</p>
@@ -91,6 +112,8 @@ class BasicRAG:
             """
 
         try:
+            # Add the user query to the chat history
+            self.add_to_history("user", query)
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -99,7 +122,9 @@ class BasicRAG:
                 ],
                 temperature=0.7
             )
-            return response.choices[0].message.content
+            assistant_response = response.choices[0].message.content
+            self.add_to_history("assistant", assistant_response)
+            return assistant_response
         except Exception as e:
             return f"An error occurred while generating a response: {e}"
     
