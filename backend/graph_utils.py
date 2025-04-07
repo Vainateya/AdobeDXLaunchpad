@@ -62,6 +62,9 @@ def get_specific_graph(courses, certificates, relevant_roles, info_level, starti
         if src.display in starting_nodes and src not in G:
             queue.append(src)
             G.add_node(src)
+            if type(src) == Certificate:
+                G.add_node(src.study)
+                G.add_edge(src.study, src)
 
             if info_level == 'low':
                 pass
@@ -78,6 +81,10 @@ def get_specific_graph(courses, certificates, relevant_roles, info_level, starti
                                 queue.append(src)
                                 if type(src) == Certificate and src.display not in starting_nodes:
                                     certificate_in_graph = True
+                                if type(src) == Certificate:
+                                    G.add_node(src.study)
+                                    G.add_edge(src.study, src)
+                                    src = src.study
                             G.add_edge(node, src)
 
             if info_level == 'high':
@@ -89,6 +96,10 @@ def get_specific_graph(courses, certificates, relevant_roles, info_level, starti
                             if src not in G:
                                 G.add_node(src)
                                 queue.append(src)
+                                if type(src) == Certificate:
+                                    G.add_node(src.study)
+                                    G.add_edge(src.study, src)
+                                    src = src.study
                             G.add_edge(node, src)
 
 
@@ -123,9 +134,11 @@ def graph_to_2d_array(G):
         if type(node) == Course:
             node_type = 'course'
             desc = f'Course objectives: {node.objectives}'
-        else:
+        elif type(node) == Certificate:
             node_type = 'certificate'
             desc = f'Prerequisites: {node.prereq}'
+        else:
+            node_type = 'study'
         graph_2d[row].append({'type': node_type, 'display': node.display, 'data': node.to_dict()})
 
     edges_2d = []

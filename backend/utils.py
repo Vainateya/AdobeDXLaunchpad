@@ -26,6 +26,9 @@ def load_sources_pickle(filename):
         sources = pickle.load(f)
     return sources
 
+def get_certificate_and_study(filename):
+    cert = Certificate(filename)
+
 class Source:
     def __init__(self, category: str, level: str, job_role: str, display: str, all_text: str, link: str = ''):
         self.category = category
@@ -214,6 +217,7 @@ class Certificate(Source):
                 details += detail + ', '
             study_materials_parsed[-1] += details
         self.study_materials = study_materials_parsed
+        self.study = Study(self)
 
     def get_embedding(self, model):
         relevant_text = [self.prereq] + [i for i in self.study_materials]
@@ -324,3 +328,8 @@ class Certificate(Source):
             "study_materials": '\n'.join(self.study_materials)
         })
         return certificate_dict
+    
+class Study(Source):
+    def __init__(self, cert: Certificate):
+        super().__init__(cert.category, cert.level, cert.job_role, cert.display + ' Study Materials', cert.all_text, cert.link + '?tab=certificate4')
+        self.type = "study"
