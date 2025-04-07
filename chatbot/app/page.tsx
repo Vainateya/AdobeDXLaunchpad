@@ -29,7 +29,7 @@ return (
 		<div
 			key={idx}
 			className={`rounded-lg p-4 shadow-md ${
-			message.from === "user" ? "bg-[#FF0000]" : "bg-[#2A2A2A]"
+			message.from === "user" ? "bg-[#EB1000]" : "bg-[#2A2A2A]"
 			}`}
 			style={{ color: "#FFFFFF" }}
 		>
@@ -55,6 +55,10 @@ const textareaRef = useRef(null);
 const [hoveredNode, setHoveredNode] = useState(null);
 const [hoverPosition, setHoverPosition] = useState({ x: 0, y: 0 });
 
+const [graphHistory, setGraphHistory] = useState([]);
+const [currentGraphIndex, setCurrentGraphIndex] = useState(null);
+const [showHistory, setShowHistory] = useState(false);
+
 useEffect(() => {
 	if (textareaRef.current) {
 	textareaRef.current.style.height = "auto";
@@ -77,6 +81,14 @@ const handleSendMessage = () => {
 	.then((data) => {
 		const nodes = data.nodes;
 		const edges = data.edges;
+		const newGraph = {
+		nodes,
+		edges,
+		message: data.message,
+		userMessage: chatMessage,
+		};
+		setGraphHistory((prev) => [...prev, newGraph]);
+		setCurrentGraphIndex(graphHistory.length);
 		updateGraph(nodes, edges);
 		setMessages([
 		...messages,
@@ -101,8 +113,10 @@ const updateGraph = (nodes, edges) => {
 	row.map((nodeData, colIndex) => ({
 		id: String(nodeData.display),
 		data: {
-			...nodeData,         // includes type, display, data
-			label: nodeData.display  // restore label for rendering
+		...nodeData,
+		label: `${nodeData.display} (${
+			nodeData.type === "course" ? "Course" : "Certification"
+		})`,
 		},
 		position: {
 		x: nodeOrigin[0] + colIndex * 200,
@@ -110,12 +124,13 @@ const updateGraph = (nodes, edges) => {
 		},
 		style: {
 		backgroundColor:
-			nodeData.type === "course" ? "#FF0000" : "#2A2A2A",
+			nodeData.type === "course" ? "#EB1000" : "#2A2A2A",
 		padding: "10px",
 		borderRadius: "5px",
 		color: "white",
 		fontSize: "14px",
 		fontWeight: "bold",
+		textAlign: "center",
 		},
 	}))
 	);
@@ -133,6 +148,62 @@ const updateGraph = (nodes, edges) => {
 
 return (
 	<div className="grid grid-cols-2 gap-4 p-8 min-h-screen font-sans relative">
+	{/* 📜 History Button */}
+	{!showHistory && (
+	<button
+		onClick={() => setShowHistory(true)}
+		className="absolute top-10 left-4 bg-[#EB1000] hover:bg-red-700 text-white font-semibold py-2 px-4 rounded shadow-lg z-50"
+	>
+		📜 History
+	</button>
+	)}
+
+	{/* History Sidebar */}
+	{showHistory && (
+		<div className="fixed inset-0 z-40 bg-black bg-opacity-50 flex">
+		<div className="w-80 bg-[#1f1f1f] p-4 overflow-y-auto shadow-2xl">
+			<div className="flex justify-between items-center mb-4">
+			<h2 className="text-white text-lg font-bold">Graph History</h2>
+			<button
+				className="text-gray-300 hover:text-white text-xl"
+				onClick={() => setShowHistory(false)}
+			>
+				✕
+			</button>
+			</div>
+
+			{graphHistory.length === 0 ? (
+			<p className="text-sm text-gray-400 italic">No history yet.</p>
+			) : (
+			graphHistory.map((item, index) => (
+				<div
+				key={index}
+				onClick={() => {
+					updateGraph(item.nodes, item.edges);
+					setCurrentGraphIndex(index);
+					setShowHistory(false);
+				}}
+				className={`text-white text-sm p-3 rounded mb-2 cursor-pointer ${
+					index === currentGraphIndex
+					? "bg-[#EB1000]"
+					: "bg-[#2A2A2A] hover:bg-[#3A3A3A]"
+				}`}
+				>
+				<p className="font-semibold truncate">{item.userMessage}</p>
+				<p className="text-xs italic text-gray-300">
+					{item.message.slice(0, 60)}...
+				</p>
+				</div>
+			))
+			)}
+		</div>
+		<div
+			className="flex-grow"
+			onClick={() => setShowHistory(false)}
+		/>
+		</div>
+	)}
+
 	{/* Graph Display */}
 	<div className="flex-grow relative">
 		<ReactFlow
@@ -172,33 +243,38 @@ return (
 			onMouseEnter={() => setHoveredNode(hoveredNode)}
 			onMouseLeave={() => setHoveredNode(null)}
 		>
-			{/* Title */}
 			<p className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-300">
-				{hoveredNode.data.type === "course" ? "Course" : "Certification"}
+			{hoveredNode.data.type === "course"
+				? "Course"
+				: "Certification"}
 			</p>
 
-
-			{/* Shared Fields */}
 			{hoveredNode.data.data?.category && (
-			<p className="text-sm mb-1"><strong>Category:</strong> {hoveredNode.data.data.category}</p>
+			<p className="text-sm mb-1">
+				<strong>Category:</strong>{" "}
+				{hoveredNode.data.data.category}
+			</p>
 			)}
 			{hoveredNode.data.data?.level && (
-			<p className="text-sm mb-1"><strong>Level:</strong> {hoveredNode.data.data.level}</p>
+			<p className="text-sm mb-1">
+				<strong>Level:</strong> {hoveredNode.data.data.level}
+			</p>
 			)}
 			{hoveredNode.data.data?.job_role && (
-			<p className="text-sm mb-1"><strong>Job Role:</strong> {hoveredNode.data.data.job_role}</p>
-			)}
-
-			{/* Course-specific: only show objectives */}
-			{hoveredNode.data.type === "course" && hoveredNode.data.data?.objectives && (
-			<p className="text-sm mb-1 whitespace-pre-wrap">
-				<strong>Objectives:</strong> {hoveredNode.data.data.objectives}
+			<p className="text-sm mb-1">
+				<strong>Job Role:</strong>{" "}
+				{hoveredNode.data.data.job_role}
 			</p>
 			)}
 
-			{/* Certificate-specific: no additional fields */}
+			{hoveredNode.data.type === "course" &&
+			hoveredNode.data.data?.objectives && (
+				<p className="text-sm mb-1 whitespace-pre-wrap">
+				<strong>Objectives:</strong>{" "}
+				{hoveredNode.data.data.objectives}
+				</p>
+			)}
 
-			{/* Link */}
 			{hoveredNode.data.data?.link ? (
 			<a
 				href={hoveredNode.data.data.link}
@@ -209,12 +285,12 @@ return (
 				Visit Official Page →
 			</a>
 			) : (
-			<p className="text-gray-400 text-sm italic mt-2">No link available</p>
+			<p className="text-gray-400 text-sm italic mt-2">
+				No link available
+			</p>
 			)}
 		</div>
 		)}
-
-
 	</div>
 
 	{/* Chat Interface */}
@@ -223,11 +299,14 @@ return (
 		<p className="text-2xl font-bold text-white">Adobe Chat</p>
 		</div>
 
-		<MessageList className="flex-grow overflow-y-auto p-2" messages={messages} />
+		<MessageList
+		className="flex-grow overflow-y-auto p-2"
+		messages={messages}
+		/>
 
 		{loading && (
 		<div className="flex justify-center my-2">
-			<PulseLoader color="#FF0000" />
+			<PulseLoader color="#EB1000" />
 		</div>
 		)}
 
@@ -243,7 +322,9 @@ return (
 		/>
 		<button
 			className={`text-white font-medium text-lg px-5 py-3 transition-all rounded-lg ${
-			loading ? "bg-gray-500 cursor-not-allowed" : "bg-[#FF0000] hover:bg-red-700"
+			loading
+				? "bg-gray-500 cursor-not-allowed"
+				: "bg-[#EB1000] hover:bg-red-700"
 			}`}
 			onClick={handleSendMessage}
 			disabled={loading}
