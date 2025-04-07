@@ -19,13 +19,35 @@ def extract_resources(text):
     Returns:
         list: The extracted list of strings, or None if not found.
     """
-    pattern = r"<p><strong>Resources Listed</strong>:\s*(\[[^\]]*\])</p>"
+    pattern = r"<p hidden><strong>Resources Listed</strong>:\s*(\[[^\]]*\])</p>"
 
     match = re.search(pattern, text)
     if match:
         list_str = match.group(1)
         # Optionally, convert the string representation of the list to an actual list:
         resources = ast.literal_eval(list_str)
+        return resources
+    else:
+        return []
+
+def extract_resources_relations(text) -> tuple[str, str]:
+    """
+    Parameters:
+        text (str): The body of text containing the substring.
+        
+    Returns:
+        list: The extracted list of strings, or None if not found.
+    """
+    pattern = r"<p hidden><strong>Resources Ordered</strong>:\s*(\[[^\]]*\])</p>"
+
+    match = re.search(pattern, text)
+    if match:
+        list_str = match.group(1)
+        # Optionally, convert the string representation of the list to an actual list:
+        resource_items = ast.literal_eval(list_str)
+        resources = []
+        for resource_items in resource_items:
+            resources.append(resource_items.split("=>"))
         return resources
     else:
         return []
@@ -74,6 +96,9 @@ class BasicRAG:
             graph_args[0] = ["All"]
             G = get_specific_graph(courses, certificates, relevant_roles = graph_args[0], info_level = graph_args[1], starting_nodes = graph_args[2])
             print("REDO: G", len(G), graph_args)
+        if len(G) == 0:
+            graph = nx.DiGraph()
+            return graph, None, None
 
         nodes, edges = graph_to_2d_array(G)
         context = get_full_string(nodes, edges)
@@ -158,7 +183,8 @@ class BasicRAG:
                 <li>Wrap paragraphs in <code>&lt;p&gt;</code></li>
                 <li>Use <code>&lt;h2&gt;</code> and <code>&lt;h3&gt;</code> for sections</li>
                 <li>Use <code>&lt;ul&gt;&lt;li&gt;</code> for lists</li>
-                <li>End any responses with a list of the course and certification names mentioned in your response up until now, formatted as "<p><strong>Resources Listed</strong>:['Resource 1', 'Resource 2', ...]</p>" If no resources are listed, output <p><strong>Resources Listed</strong>:[]</p>" </li>
+                <li>End any responses with a list of the course and certification names mentioned in your response up until now, formatted as "<p hidden><strong>Resources Listed</strong>:['Resource 1', 'Resource 2', ...]</p>" If no resources are listed, output <p><strong>Resources Listed</strong>:[]</p>" </li>
+                <li>If any resource in "Resources Listed" should be followed in a specific order, please indicate that relationship in pairs formatted as "<p hidden><strong>Resources Ordered</strong>:['Resource 1 => Resource 2', 'Resource 2 => Resource 3', ...]</p>" If no resources are listed or there are no such relations, output <p><strong>Resources Ordered</strong>:[]</p>"</li>
             </ul>
             
             <h2> Generate Your Response Below:</h2>
@@ -175,13 +201,12 @@ class BasicRAG:
                 temperature=0.7
             )
             assistant_response = response.choices[0].message.content
-            resource_names = extract_resources(assistant_response)
-            # print("assistant_response", assistant_response)
-            # print("resource_names", resource_names)
             self.add_to_history("assistant", assistant_response)
-            return assistant_response, resource_names
+            return assistant_response
         except Exception as e:
-            return f"An error occurred while generating a response: {e}"
+            error_str = f"An error occurred while generating a response: {e}"
+            print(error_str)
+            return error_str
 
     def generate_graph_args(self, query:str):
         chat_history_text = self.format_chat_history(html=False)
@@ -225,8 +250,17 @@ class BasicRAG:
     def run_rag_pipeline(self, query: str, courses, certificates, top_k: int = 5) -> str:
         """Runs the full RAG pipeline: retrieves documents and generates a response."""
         retrieved_docs = self.retrieve_documents(query, top_k)
-        response, resource_names = self.generate_response(query, retrieved_docs)
+        response = self.generate_response(query, retrieved_docs)
+
+        resource_names = extract_resources(response)
+        resource_relations = extract_resources_relations(response)
+
+        print("query", query)
+        print("response", response)
+        print("resource_names", resource_names)
+        print("resource_relations", resource_relations)
         max_resources = 5
+
         if resource_names:
             job_roles, info_level = self.generate_graph_args(query)
             if info_level != "high":

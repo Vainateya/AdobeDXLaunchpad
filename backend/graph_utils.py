@@ -76,7 +76,7 @@ def get_specific_graph(courses, certificates, relevant_roles, info_level, starti
                             if src not in G:
                                 G.add_node(src)
                                 queue.append(src)
-                                if type(src) == Certificate:
+                                if type(src) == Certificate and src.display not in starting_nodes:
                                     certificate_in_graph = True
                             G.add_edge(node, src)
 
