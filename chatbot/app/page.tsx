@@ -96,6 +96,16 @@ const handleKeyDown = (event) => {
 	}
 };
 
+const getNodeColor = (type: string) => {
+	if (type === "course") {
+		return "#FF0000";
+	} else if (type === "certificate") {
+		return "#2A2A2A";
+	} else {
+		return "#1151B8"
+	}
+}
+
 const updateGraph = (nodes, edges) => {
 	const updatedNodes = nodes.flatMap((row, rowIndex) =>
 	row.map((nodeData, colIndex) => ({
@@ -109,8 +119,7 @@ const updateGraph = (nodes, edges) => {
 		y: nodeOrigin[1] + rowIndex * 150,
 		},
 		style: {
-		backgroundColor:
-			nodeData.type === "course" ? "#FF0000" : "#2A2A2A",
+		backgroundColor: getNodeColor(nodeData.type),
 		padding: "10px",
 		borderRadius: "5px",
 		color: "white",

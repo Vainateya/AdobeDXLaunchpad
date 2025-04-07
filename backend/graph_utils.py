@@ -99,9 +99,10 @@ def get_specific_graph(courses, certificates, relevant_roles, info_level, starti
                                 if type(src) == Certificate:
                                     G.add_node(src.study)
                                     G.add_edge(src.study, src)
-                                    src = src.study
-                            G.add_edge(node, src)
-
+                            if type(src) == Certificate:
+                                G.add_edge(node, src.study)
+                            else:
+                                G.add_edge(node, src)
 
     pos = nx.circular_layout(G)
     nx.draw(G, pos, with_labels=True, font_size=6, node_size=40)
@@ -133,10 +134,8 @@ def graph_to_2d_array(G):
     for node, row in row_map.items():
         if type(node) == Course:
             node_type = 'course'
-            desc = f'Course objectives: {node.objectives}'
         elif type(node) == Certificate:
             node_type = 'certificate'
-            desc = f'Prerequisites: {node.prereq}'
         else:
             node_type = 'study'
         graph_2d[row].append({'type': node_type, 'display': node.display, 'data': node.to_dict()})

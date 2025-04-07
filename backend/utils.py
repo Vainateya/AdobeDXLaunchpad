@@ -146,10 +146,13 @@ class Course(Source):
     def is_prereq_to(self, other_source):
         if self.category != other_source.category:
             return False
+        
         if type(other_source) == Certificate:
             return self.certificate_levels.index(other_source.level) >= self.course_levels.index(self.level)
-        else:
+        elif type(other_source) == Course:
             return self.course_levels.index(other_source.level) == self.course_levels.index(self.level) + 1
+        else:
+            return False
     
     def to_dict(self):
         """Convert the Course object to a dictionary."""
@@ -230,8 +233,10 @@ class Certificate(Source):
             return False
         if type(other_source) == Course:
             return self.course_levels.index(other_source.level) >= self.certificate_levels.index(self.level) + 1
-        else:
+        elif type(other_source) == Certificate:
             return self.certificate_levels.index(other_source.level) == self.certificate_levels.index(self.level) + 1
+        else:
+            return False
 
     def _rem_big_spaces(self, text):
         text = text.replace("\n", "")
