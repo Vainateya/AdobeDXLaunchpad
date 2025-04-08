@@ -4,3 +4,4 @@ dependency_graph/.env
 .venv/*
 
 backend/pickels/*
+backend/.env

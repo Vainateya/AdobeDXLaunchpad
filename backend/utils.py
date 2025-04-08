@@ -336,5 +336,10 @@ class Certificate(Source):
     
 class Study(Source):
     def __init__(self, cert: Certificate):
-        super().__init__(cert.category, cert.level, cert.job_role, cert.display + ' Study Materials', cert.all_text, cert.link + '?tab=certificate4')
+        link = cert.link
+        if '?' in link:
+            link += '&tab=certificate4'
+        else:
+            link += '?tab=certificate4'
+        super().__init__(cert.category, cert.level, cert.job_role, cert.display + ' Study Materials', cert.all_text, link)
         self.type = "study"

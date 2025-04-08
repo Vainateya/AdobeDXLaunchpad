@@ -29,7 +29,9 @@ from utils import *
 # }
 # job_role_query = "I want to primarily work with digital marketing, such as advertising."
 
-def get_llm_graph(courses, certificates, sources):
+sample = ['Adobe Analytics Foundations', 'Adobe Analytics Architect Master', 'Adobe Analytics Business Practitioner Expert', 'Adobe Analytics Business Practitioner Professional', 'Adobe Analytics Developer Expert', 'Adobe Analytics Developer Professional']
+
+def get_llm_graph(courses, certificates, sources=sample):
     """
     Create a directed graph based on a list of relevant sources given by a llm call
     """
