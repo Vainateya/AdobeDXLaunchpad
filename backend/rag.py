@@ -277,3 +277,58 @@ class BasicRAG:
         category = self.get_category(query)
         response = self.generate_response_based_on_category(query, category, courses, certificates)
         return response
+
+    def generate_response(self, query, documents: str):
+        # Construct the prompt
+        # Structured prompt with HTML output
+
+        chat_history_text = self.format_chat_history()
+
+        prompt = f"""
+            YOU ARE AN ADOBE COURSE/CERTIFICATE RECCOMENDATION BOT. YOUR JOB IS TO IDENTIFY WHICH CATEGORY A USER's CURRENT REQUEST WILL FALL UNDER. 
+            A USER REQUEST/QUERY IS EITHER: 
+
+            1. Irrelevent Request: 
+                
+                In this case, the query given is not really anything to do with Adobe's courses, or is not really productive conversation to be made
+            
+                few shot examples: 
+
+            2. General Request: 
+
+                In this case, the query is exploratory in nature, asking about the nature of Adobe's courses, specific questions about a certain course, or asking about Adobe's program
+
+                few shot examples: 
+
+            3. Modifying or Creating a Course Trajectory
+
+                In this case, the user wants the LLM to specifically give a course/certificate trajectory or change a trajectory or plan that was created before.
+
+                few shot examples:
+
+            We will provide the previous conversation history as well as user query below. 
+
+            Previous Conversation: "{chat_history_text}"
+
+            User Query: "{query}"
+            
+            Your output is only meant to be a number, 1 2 or 3, that indicates which category the user request would be like. No additional words, characters, or sentences please, just one singular number will suffice.
+            """
+
+        try:
+            self.add_to_history("user", query)
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.7
+            )
+            assistant_response = response.choices[0].message.content
+            self.add_to_history("assistant", assistant_response)
+            return assistant_response
+        except Exception as e:
+            error_str = f"An error occurred while generating a response: {e}"
+            print(error_str)
+            return error_str
