@@ -7,7 +7,15 @@ import { PulseLoader } from "react-spinners";
 
 const nodeOrigin = [200, 20];
 
-const MessageList = ({ className, messages }) => {
+const MessageList = ({
+	className,
+	messages,
+	messageRefs,
+}: {
+	className: string;
+	messages: { from: string; text: string }[];
+	messageRefs: React.MutableRefObject<(HTMLDivElement | null)[]>;
+}) => {
 const messageEndRef = useRef(null);
 useEffect(() => {
 	messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -28,6 +36,9 @@ return (
 		messages.map((message, idx) => (
 		<div
 			key={idx}
+			ref={(el) => {
+				messageRefs.current[idx] = el;
+			}}
 			className={`rounded-lg p-4 shadow-md ${
 			message.from === "user" ? "bg-[#EB1000]" : "bg-[#2A2A2A]"
 			}`}
@@ -54,6 +65,7 @@ const [loading, setLoading] = useState(false);
 const textareaRef = useRef(null);
 const [hoveredNode, setHoveredNode] = useState(null);
 const [hoverPosition, setHoverPosition] = useState({ x: 0, y: 0 });
+const messageRefs = useRef<(HTMLDivElement | null)[]>([]);
 
 const [graphHistory, setGraphHistory] = useState([]);
 const [currentGraphIndex, setCurrentGraphIndex] = useState(null);
@@ -81,12 +93,15 @@ const handleSendMessage = () => {
 	.then((data) => {
 		const nodes = data.nodes;
 		const edges = data.edges;
+		const userMsgIndex = messages.length;
 		const newGraph = {
-		nodes,
-		edges,
-		message: data.message,
-		userMessage: chatMessage,
+			nodes,
+			edges,
+			message: data.message,
+			userMessage: chatMessage,
+			messageIndex: userMsgIndex, // this tracks which message index to scroll to
 		};
+
 		setGraphHistory((prev) => [...prev, newGraph]);
 		setCurrentGraphIndex(graphHistory.length);
 		updateGraph(nodes, edges);
@@ -154,7 +169,7 @@ return (
 		onClick={() => setShowHistory(true)}
 		className="absolute top-10 left-4 bg-[#EB1000] hover:bg-red-700 text-white font-semibold py-2 px-4 rounded shadow-lg z-50"
 	>
-		📜 History
+		History
 	</button>
 	)}
 
@@ -182,7 +197,11 @@ return (
 					updateGraph(item.nodes, item.edges);
 					setCurrentGraphIndex(index);
 					setShowHistory(false);
-				}}
+					const target = messageRefs.current[item.messageIndex];
+					if (target) {
+						target.scrollIntoView({ behavior: "smooth", block: "start" });
+					}
+				}}				  
 				className={`text-white text-sm p-3 rounded mb-2 cursor-pointer ${
 					index === currentGraphIndex
 					? "bg-[#EB1000]"
@@ -300,9 +319,11 @@ return (
 		</div>
 
 		<MessageList
-		className="flex-grow overflow-y-auto p-2"
-		messages={messages}
+			className="flex-grow overflow-y-auto p-2"
+			messages={messages}
+			messageRefs={messageRefs}
 		/>
+
 
 		{loading && (
 		<div className="flex justify-center my-2">
