@@ -90,11 +90,12 @@ class BasicRAG:
         #     'type': Course
         # }
         # G = get_specific_graph(courses, certificates, relevant_roles = ['All', 'Business Practitioner'], info_level = 'medium', starting_node = starting_node)
-        G = get_specific_graph(courses, certificates, relevant_roles = graph_args[0], info_level = graph_args[1], starting_nodes = graph_args[2])
+        # G = get_specific_graph(courses, certificates, relevant_roles = graph_args[0], info_level = graph_args[1], starting_nodes = graph_args[2])
+        G = get_llm_graph(courses, certificates, graph_args)
         print("G", len(G), graph_args)
         if len(G) == 0:
             graph_args[0] = ["All"]
-            G = get_specific_graph(courses, certificates, relevant_roles = graph_args[0], info_level = graph_args[1], starting_nodes = graph_args[2])
+            G = get_llm_graph(courses, certificates, graph_args)
             print("REDO: G", len(G), graph_args)
         if len(G) == 0:
             graph = nx.DiGraph()

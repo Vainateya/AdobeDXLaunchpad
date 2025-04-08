@@ -29,6 +29,35 @@ from utils import *
 # }
 # job_role_query = "I want to primarily work with digital marketing, such as advertising."
 
+def get_llm_graph(courses, certificates, sources):
+    """
+    Create a directed graph based on a list of relevant sources given by a llm call
+    """
+
+    G = nx.DiGraph()
+    relevant = []
+    for i in courses + certificates:
+        if i.display in sources:
+            relevant.append(i)
+            G.add_node(i)
+            if type(i) == Certificate:
+                G.add_node(i.study)
+                G.add_edge(i.study, i)
+    
+    for src1 in relevant:
+        for src2 in relevant:
+            if src1 == src2:
+                continue
+            if src1.is_prereq_to(src2):
+                if type(src2) == Certificate:
+                    G.add_edge(src1, src2.study)
+                else:
+                    G.add_edge(src1, src2)
+    
+    return G
+    
+
+
 def get_specific_graph(courses, certificates, relevant_roles, info_level, starting_nodes):
     """
     Create a directed graph of courses and certificates based on prerequisite relationships.
