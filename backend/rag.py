@@ -215,7 +215,7 @@ class BasicRAG:
             print(error_str)
             return error_str
         
-    def generate_general_response(self, query, documents: str):
+    def generate_general_response(self, query, documents: str, user_profile):
         chat_history_text = self.format_chat_history()
         prompt = f"""
         <!-- YOU ARE AN INTELLIGENT COURSE AND CERTIFICATE RECOMMENDATION ASSISTANT FOR ADOBE USERS. USE THE USER’S BACKGROUND, PREVIOUS PLAN HISTORY, AND CURRENT QUERY TO EITHER GENERATE RECOMMENDATIONS, EXPLAIN ADOBE COURSES, OR ASK CLARIFYING QUESTIONS. -->
@@ -336,14 +336,14 @@ class BasicRAG:
         except Exception as e:
             return f"An error occurred while generating a response: {e}"
     
-    def run_rag_pipeline(self, query: str, courses, certificates, top_k: int = 5) -> str:
+    def run_rag_pipeline(self, query: str, courses, certificates, user_profile, top_k: int = 5) -> str:
         """Runs the full RAG pipeline: retrieves documents and generates a response."""
         bucket = self.find_bucket(query)
         if bucket == Bucket.IRRELEVANT:
             return "I don't understand what you said. Can you please ask something related to Adobe?", None
         elif bucket == Bucket.GENERAL:
             retrieved_docs = self.retrieve_documents(query, top_k)
-            response = self.generate_general_response(query, retrieved_docs)
+            response = self.generate_general_response(query, retrieved_docs, user_profile)
             return response, None
         else:
             retrieved_docs = self.retrieve_documents(query, top_k)

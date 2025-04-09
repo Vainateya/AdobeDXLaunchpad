@@ -87,7 +87,7 @@ def get_graph():
     data = request.get_json()
     message = data['category']
     
-    response, category, graph = rag.run_rag_pipeline(message, courses, certificates)
+    response, category, graph = rag.run_rag_pipeline(message, courses, certificates, user_data)
     if len(graph) > 0:
         nodes, edges = graph_to_2d_array(graph)
     else:
