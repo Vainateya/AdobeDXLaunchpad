@@ -4,12 +4,19 @@ from graph_utils import *
 from utils import *
 import ast
 import inspect
+from enum import Enum
+import re
+import ast
+
+class Bucket(Enum):
+    IRRELEVANT = 1
+    GENERAL = 2
+    GRAPH = 3
+
 
 COURSE_LEVELS = ['Foundations', 'Professional', 'Expert']
 CERT_LEVELS = ['Professional', 'Expert', 'Master']
 
-import re
-import ast
 
 def extract_resources(text):
     """
@@ -63,6 +70,7 @@ class BasicRAG:
         self.model = model
         self.client = OpenAI()
         self.chat_history = [] 
+        self.role = Bucket.IRRELEVANT
 
     def add_to_history(self, role: str, content: str):
         """Appends a new entry to the chat history."""
@@ -278,43 +286,52 @@ class BasicRAG:
         response = self.generate_response_based_on_category(query, category, courses, certificates)
         return response
 
-    def generate_response(self, query, documents: str):
+    def first_pass(self, query):
         # Construct the prompt
         # Structured prompt with HTML output
 
         chat_history_text = self.format_chat_history()
 
         prompt = f"""
-            YOU ARE AN ADOBE COURSE/CERTIFICATE RECCOMENDATION BOT. YOUR JOB IS TO IDENTIFY WHICH CATEGORY A USER's CURRENT REQUEST WILL FALL UNDER. 
-            A USER REQUEST/QUERY IS EITHER: 
+        YOU ARE AN ADOBE COURSE/CERTIFICATE RECOMMENDATION BOT. YOUR JOB IS TO IDENTIFY WHICH CATEGORY A USER'S CURRENT REQUEST FALLS UNDER.
 
-            1. Irrelevent Request: 
-                
-                In this case, the query given is not really anything to do with Adobe's courses, or is not really productive conversation to be made
-            
-                few shot examples: 
+        A USER QUERY IS CATEGORIZED INTO ONE OF THE FOLLOWING TYPES:
 
-            2. General Request: 
+        1. **Irrelevant Request**  
+        The query is not related to Adobe courses or certificates, or is general conversation with no actionable request.
 
-                In this case, the query is exploratory in nature, asking about the nature of Adobe's courses, specific questions about a certain course, or asking about Adobe's program
+        **Examples:**
+        - "What's the weather like today?"
+        - "Tell me a joke."
+        - "Can you help me fix my printer?"
 
-                few shot examples: 
+        2. **General Request**  
+        The query is exploratory, asking for information about Adobe programs, courses, or certificates without requesting a specific learning path.
 
-            3. Modifying or Creating a Course Trajectory
+        **Examples:**
+        - "What types of courses does Adobe offer?"
+        - "Can you tell me more about the Adobe Analytics Professional course?"
+        - "Are there any certificates for digital marketing?"
 
-                In this case, the user wants the LLM to specifically give a course/certificate trajectory or change a trajectory or plan that was created before.
+        3. **Modifying or Creating a Course Graph/Trajectory**  
+        The user wants to receive a recommended course/certificate path or make changes to a previously suggested learning trajectory.
 
-                few shot examples:
+        **Examples:**
+        - "What’s the best path to reach Adobe Analytics Expert?"
+        - "I already completed Adobe Commerce Foundations, what should I take next?"
+        - "Can you help me update my learning plan for a Master certificate in Adobe Analytics?"
 
-            We will provide the previous conversation history as well as user query below. 
+        We will provide the previous conversation history and user query below.
 
-            Previous Conversation: "{chat_history_text}"
+        **Previous Conversation:**  
+        "{chat_history_text}"
 
-            User Query: "{query}"
-            
-            Your output is only meant to be a number, 1 2 or 3, that indicates which category the user request would be like. No additional words, characters, or sentences please, just one singular number will suffice.
-            """
+        **User Query:**  
+        "{query}"
 
+        Respond with ONLY a number: `1`, `2`, or `3` — indicating the category of the request.  
+        No additional words, explanations, or symbols.
+        """
         try:
             self.add_to_history("user", query)
             response = self.client.chat.completions.create(
@@ -323,7 +340,8 @@ class BasicRAG:
                     {"role": "system", "content": "You are a helpful assistant."},
                     {"role": "user", "content": prompt},
                 ],
-                temperature=0.7
+                temperature=0.1,
+                seed=42
             )
             assistant_response = response.choices[0].message.content
             self.add_to_history("assistant", assistant_response)
@@ -332,3 +350,18 @@ class BasicRAG:
             error_str = f"An error occurred while generating a response: {e}"
             print(error_str)
             return error_str
+    
+    def find_bucket(self, query: str):
+        response = self.first_pass(query).strip()
+
+        if "1" in response:
+            self.role = Bucket.IRRELEVANT
+        elif "2" in response:
+            self.role = Bucket.GENERAL
+        elif "3" in response:
+            self.role = Bucket.GRAPH
+        else:
+            print("Warning: Unable to classify query response properly.")
+            self.role = Bucket.IRRELEVANT  # fallback
+
+    
