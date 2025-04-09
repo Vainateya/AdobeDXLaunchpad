@@ -15,7 +15,7 @@ import graphviz as graphviz
 
 from utils import *
 from graph_utils import *
-from rag import *
+from rag_new import *
 
 # embedding_model = HuggingFaceEmbeddings(
 #     model_name="thenlper/gte-small",
@@ -80,7 +80,7 @@ def get_graph():
     data = request.get_json()
     message = data['category']
     
-    response, category, graph = rag.run_rag_pipeline(message, courses, certificates)
+    response, graph = rag.run_rag_pipeline(message, courses, certificates)
     if len(graph) > 0:
         nodes, edges = graph_to_2d_array(graph)
     else:

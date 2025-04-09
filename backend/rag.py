@@ -82,27 +82,13 @@ class BasicRAG:
         )
         return context
 
-    def retrieve_graph(self, query, courses, certificates, graph_args, top_k = 1):
-        category = self.document_store.get_category_from_best_document(query)
-        # starting_node = {
-        #     'category': 'Adobe Commerce',
-        #     'level': 'Foundations',
-        #     'type': Course
-        # }
-        # G = get_specific_graph(courses, certificates, relevant_roles = ['All', 'Business Practitioner'], info_level = 'medium', starting_node = starting_node)
+    def retrieve_graph(self, courses, certificates, graph_args):
         G = get_specific_graph(courses, certificates, relevant_roles = graph_args[0], info_level = graph_args[1], starting_nodes = graph_args[2])
         print("G", len(G), graph_args)
         if len(G) == 0:
-            graph_args[0] = ["All"]
-            G = get_specific_graph(courses, certificates, relevant_roles = graph_args[0], info_level = graph_args[1], starting_nodes = graph_args[2])
-            print("REDO: G", len(G), graph_args)
-        if len(G) == 0:
             graph = nx.DiGraph()
             return graph, None, None
-
-        nodes, edges = graph_to_2d_array(G)
-        context = get_full_string(nodes, edges)
-        return G, context, category
+        return G
 
     def format_chat_history(self, html=True) -> str:
         """Formats the chat history for including in the prompt."""
