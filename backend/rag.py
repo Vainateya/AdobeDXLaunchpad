@@ -368,7 +368,8 @@ class BasicRAG:
             # print("Retrieved docs:", [d['metadata']['title'] for d in retrieved_docs], "Current docs:", self.current_graph)
             # print("graph_list:", self.current_graph)
 
-            current_docs = [self.title2doc[g] for g in self.current_graph if g in self.current_graph] + retrieved_docs
+            # TODO: Handle Study materials
+            current_docs = [self.title2doc[g] for g in self.current_graph if g in self.current_graph and 'Study Materials' not in g] + retrieved_docs
             resource_info = self.format_docs_context(current_docs)
 
             raw_graph_ops = self.generate_new_graph(query, self.current_graph, self.past_graphs, resource_info)

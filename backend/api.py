@@ -82,8 +82,10 @@ rag = BasicRAG(document_store=store, supplement_store = program_store)
 
 @app.route('/api/survey', methods=['POST'])
 def survey():
+    global user_data
     data = request.get_json()
     print("Survey received:", data)
+    user_data = data
     return jsonify({"status": "ok", "received": data}), 200
 
 @app.route('/api/get_graph', methods=['POST'])
@@ -119,11 +121,6 @@ def get_graph():
 
     # Perform any server-side actions here
 
-@app.route('/api/get_current_graph', methods=['GET'])
-def get_current_graph():
-    print("📌 Current Graph Items:", current_graph_items)
-    
-
 @app.route('/api/set_current_graph', methods=['POST'])
 def set_current_graph():
     data = request.get_json()
@@ -133,8 +130,9 @@ def set_current_graph():
     current_items = [node['data']['display'] for node in nodes if 'data' in node and 'display' in node['data']]
     print("📌 Updated Current Graph Items from frontend:", current_items)
 
-    # Optionally store this if you want it accessible in another route
-    user_data['current_graph_items'] = current_items
+    rag.current_graph = current_items
+    rag.current_nx_graph = get_llm_graph(courses, certificates, current_items)
+    rag.past_graphs.append(("I want to go back to a previous graph.", current_items))
 
     return jsonify({"status": "ok", "current_items": current_items}), 200
 
