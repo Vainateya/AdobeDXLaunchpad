@@ -281,7 +281,7 @@ class BasicRAG:
         </ul>
 
         <h2><strong>ENSURE THAT ANY COURSES YOU RECCOMEND ONLY COME FROM THE GRAPH IF ITS PROVIDED!</strong></h2>
-        
+
         <h2><strong>ENSURE THAT YOU DONT MISLABEL COURSES AND CERTIFICATES!</strong></h2>
 
         <h2><strong>Generate Your Response Below:</strong></h2>
@@ -409,8 +409,8 @@ class BasicRAG:
                 graph_str = display_edges(e)
                 self.current_nx_graph = graph
 
-            #response = self.generate_general_response(query, retrieved_docs, user_profile, graph_str)
-            response = "The graph is updated with your changes. Please let me know if you have questions about any of the courses or certificates!"
+            response = self.generate_general_response(query, retrieved_docs, user_profile, graph_str)
+            #response = "The graph is updated with your changes. Please let me know if you have questions about any of the courses or certificates!"
             self.add_to_history("user", query)
             self.add_to_history("assistant", response)
             return response, graph
@@ -456,7 +456,7 @@ class BasicRAG:
         - "Can you help me update my learning plan for a Master certificate in Adobe Analytics?"
         - "I am new to adobe commerce - what is a full learning journey, from start to finish?"
         
-        We will provide the previous conversation history and user query below.
+        ONLY USE THE CURRENT QUERY TO DETIRMINE THE CATEGORY, HOWEVER, CONSIDER THE QUERY IN CONTEXT OF HISTORY!
 
         Previous Conversation:  
         "{chat_history_text}"
@@ -474,7 +474,7 @@ class BasicRAG:
                     {"role": "system", "content": "You are a helpful assistant."},
                     {"role": "user", "content": prompt},
                 ],
-                temperature=0.1,
+                temperature=0.7,
                 seed=42
             )
             assistant_response = response.choices[0].message.content
