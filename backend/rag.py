@@ -53,7 +53,7 @@ class BasicRAG:
     def format_docs_context(self, docs):
         return "\n\n".join(
             [
-                f"<h3>{doc['metadata']['title']}</h3> <p>THIS IS OF TYPE {doc['metadata']['type']}, NO OTHER TYPE!!!</p>" +
+                f"<h3>{doc['metadata']['title']}</h3> <p>THIS IS A {doc['metadata']['type'].upper()}</p>" +
                 "".join(f"<p><strong>{key.replace('_', ' ').title()}:</strong> {value}</p>"
                         for key, value in doc['metadata'].items() if key != "title")
                 for doc in docs
@@ -281,6 +281,8 @@ class BasicRAG:
         </ul>
 
         <h2><strong>ENSURE THAT ANY COURSES YOU RECCOMEND ONLY COME FROM THE GRAPH IF ITS PROVIDED!</strong></h2>
+        
+        <h2><strong>ENSURE THAT YOU DONT MISLABEL COURSES AND CERTIFICATES!</strong></h2>
 
         <h2><strong>Generate Your Response Below:</strong></h2>
         """
@@ -407,7 +409,8 @@ class BasicRAG:
                 graph_str = display_edges(e)
                 self.current_nx_graph = graph
 
-            response = self.generate_general_response(query, retrieved_docs, user_profile, graph_str)
+            #response = self.generate_general_response(query, retrieved_docs, user_profile, graph_str)
+            response = "The graph is updated with your changes. Please let me know if you have questions about any of the courses or certificates!"
             self.add_to_history("user", query)
             self.add_to_history("assistant", response)
             return response, graph
@@ -424,7 +427,7 @@ class BasicRAG:
         A USER QUERY IS CATEGORIZED INTO ONE OF THE FOLLOWING TYPES:
 
         1. Irrelevant Request  
-        The query is completely, entirely unrelated to courses or certificates, especially the ones offered at Adobe.
+        The query is completely, entirely irrelevent, then we should not entertain it!
 
         Examples:
         - "What's the weather like today?"
@@ -432,7 +435,7 @@ class BasicRAG:
         - "Can you help me fix my printer?"
 
         2. General Request  
-        The query is exploratory, asking for information about Adobe programs, courses, or certificates without requesting a specific learning path. 
+        In this case the query is a general question, asking for information about Adobe programs, courses, or certificates without requesting a specific learning path. 
         It could also ask general logistical and programmatic questions about Adobe courses and certifications. 
 
         Examples:
@@ -442,7 +445,7 @@ class BasicRAG:
         - "How do I sign up for a certification?"
         - "Are exams available in languages other than English?"
 
-        If user wants anything AT ALL to do with the current graph, please default to the third option below:
+        If user wants anything AT ALL to do with the current learning path, please default to the third option below:
 
         3. Modifying or Creating a Course Graph/Trajectory
         The user wants to receive a recommended course/certificate path or make changes to a previously suggested learning trajectory.
