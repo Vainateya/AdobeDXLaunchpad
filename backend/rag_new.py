@@ -4,7 +4,6 @@ from graph_utils import *
 from utils import *
 import ast
 import inspect
-import tiktoken
 import time
 
 COURSE_LEVELS = ['Foundations', 'Professional', 'Expert']

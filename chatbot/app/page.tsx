@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { ReactFlow, Background } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { PulseLoader } from "react-spinners";
+import "./glowButton.css";
 
 const nodeOrigin = [200, 20];
 
@@ -73,6 +74,7 @@ export default function Home() {
   const [showSurvey, setShowSurvey] = useState(false);
   const [isCertified, setIsCertified] = useState(null); // yes or no
   const [experienceYears, setExperienceYears] = useState("");
+  const [glowActive, setGlowActive] = useState(true);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -80,7 +82,10 @@ export default function Home() {
       textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
     }
   }, [chatMessage]);
-
+  useEffect(() => {
+    const timer = setTimeout(() => setGlowActive(false), 5000);
+    return () => clearTimeout(timer);
+}, []);
   const handleSendMessage = () => {
     if (!chatMessage.trim()) return;
     setLoading(true);
@@ -142,7 +147,9 @@ export default function Home() {
         id: String(nodeData.display),
         data: {
           ...nodeData, // includes type, display, data
-          label: nodeData.display, // restore label for rendering
+          label: nodeData.type === "course" || nodeData.type === "certificate"
+			? `${nodeData.display} (${nodeData.type === "course" ? "Course" : "Certification"})`
+			: nodeData.display,
         },
         position: {
           x: nodeOrigin[0] + colIndex * 200,
@@ -182,12 +189,12 @@ export default function Home() {
         </button>
       )}
       {/* Bottom-left Survey Button */}
-      <button
+      {/* <button
         onClick={() => setShowSurvey(true)}
         className="fixed bottom-6 left-6 bg-[#EB1000] hover:bg-red-700 text-white px-4 py-2 rounded-full shadow-lg z-50"
       >
         Answer a Few Questions
-      </button>
+      </button> */}
 
       {showSurvey && (
         <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center">
@@ -361,7 +368,7 @@ export default function Home() {
           >
             {/* Title */}
             <p className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-300">
-              {hoveredNode.data.type === "course" ? "Course" : "Certification"}
+              {hoveredNode.data.type}
             </p>
 
             {/* Shared Fields */}
@@ -452,6 +459,12 @@ export default function Home() {
           </button>
         </div>
       </div>
+	<button
+        className="glow-button fixed bottom-6 left-6 z-50 wiggle-once"
+        onClick={() => setShowSurvey(true)}
+        >
+        Answer a Few Questions
+    </button>
     </div>
   );
 }
