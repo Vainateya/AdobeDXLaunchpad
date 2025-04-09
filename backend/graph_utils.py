@@ -140,6 +140,9 @@ def get_specific_graph(courses, certificates, relevant_roles, info_level, starti
     return G
 
 def graph_to_2d_array(G):
+    if len(G.nodes) == 0:
+        return [], []
+    
     root_nodes = [n for n in G.nodes if G.in_degree(n) == 0]
 
     row_map = {}

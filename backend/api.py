@@ -4,10 +4,11 @@ from flask_caching import Cache
 
 from tqdm import tqdm
 import os
+import graphviz as graphviz
 
 from utils import *
 from graph_utils import *
-from rag_new import *
+from rag import *
 
 # embedding_model = HuggingFaceEmbeddings(
 #     model_name="thenlper/gte-small",
@@ -80,7 +81,7 @@ def get_graph():
     data = request.get_json()
     message = data['category']
     
-    response, graph = rag.run_rag_pipeline(message, courses, certificates)
+    response, graph = rag.run_rag_pipeline(message, courses, certificates, user_data)
     if len(graph) > 0:
         nodes, edges = graph_to_2d_array(graph)
     else:

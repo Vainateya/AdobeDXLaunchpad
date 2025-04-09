@@ -17,46 +17,20 @@ class Bucket(Enum):
 COURSE_LEVELS = ['Foundations', 'Professional', 'Expert']
 CERT_LEVELS = ['Professional', 'Expert', 'Master']
 
+def extract_dict_from_string(s: str):
+    pattern = re.compile(r'\{.*?\}', re.DOTALL)
+    matches = pattern.finditer(s)
 
-def extract_resources(text):
-    """
-    Parameters:
-        text (str): The body of text containing the substring.
-    Returns:
-        list: The extracted list of strings, or None if not found.
-    """
-    pattern = r"<p hidden><strong>Resources Listed</strong>:\s*(\[[^\]]*\])</p>"
+    for match in matches:
+        dict_str = match.group()
+        try:
+            extracted_dict = ast.literal_eval(dict_str)
+            if isinstance(extracted_dict, dict):
+                return extracted_dict
+        except (ValueError, SyntaxError):
+            continue  # Try next match if current one fails parsing
 
-    match = re.search(pattern, text)
-    if match:
-        list_str = match.group(1)
-        # Optionally, convert the string representation of the list to an actual list:
-        resources = ast.literal_eval(list_str)
-        return resources
-    else:
-        return []
-
-def extract_resources_relations(text) -> tuple[str, str]:
-    """
-    Parameters:
-        text (str): The body of text containing the substring.
-        
-    Returns:
-        list: The extracted list of strings, or None if not found.
-    """
-    pattern = r"<p hidden><strong>Resources Ordered</strong>:\s*(\[[^\]]*\])</p>"
-
-    match = re.search(pattern, text)
-    if match:
-        list_str = match.group(1)
-        # Optionally, convert the string representation of the list to an actual list:
-        resource_items = ast.literal_eval(list_str)
-        resources = []
-        for resource_items in resource_items:
-            resources.append(resource_items.split("=>"))
-        return resources
-    else:
-        return []
+    raise ValueError("No valid dictionary found in the provided string.")
 
 class BasicRAG:
     """
@@ -70,31 +44,38 @@ class BasicRAG:
         self.client = OpenAI()
         self.chat_history = [] 
         self.role = Bucket.IRRELEVANT
+        self.past_graphs: tuple[str, list[str]] = [] # {user_query, [coursename, coursename, ...]}
+        self.current_graph = [] # {}
+        self.current_nx_graph = nx.DiGraph()
+        self.title2doc = {d['metadata']['title']: d for d in self.document_store.get_all_documents()}
 
+    def format_docs_context(self, docs):
+        return "\n\n".join(
+            [
+                f"<h3>{doc['metadata']['title']}</h3> <p>THIS IS OF TYPE {doc['metadata']['type']}, NO OTHER TYPE!!!</p>" +
+                "".join(f"<p><strong>{key.replace('_', ' ').title()}:</strong> {value}</p>"
+                        for key, value in doc['metadata'].items() if key != "title")
+                for doc in docs
+            ]
+        )
+    
     def add_to_history(self, role: str, content: str):
         """Appends a new entry to the chat history."""
         self.chat_history.append({"role": role, "content": content})
 
-    def retrieve_documents(self, query: str, top_k: int = 5):
+    def retrieve_documents(self, query: str, top_k: int = 5, omit_titles = []):
         """Fetches the top-k most relevant documents from the document store and formats metadata."""
         retrieved_docs = self.document_store.query_documents(query_text=query, top_k=top_k)
         # Format all metadata dynamically
-        context = "\n\n".join(
-            [
-                f"<h3>{doc['metadata']['title']}</h3>" +
-                "".join(f"<p><strong>{key.replace('_', ' ').title()}:</strong> {value}</p>"
-                        for key, value in doc['metadata'].items() if key != "title")
-                for doc in retrieved_docs
-            ]
-        )
-        return context
+        filtered_docs = [doc for doc in retrieved_docs if doc['metadata']['title'] not in omit_titles]
+        context = self.format_docs_context(filtered_docs)
+        return context, filtered_docs
 
-    def retrieve_graph(self, courses, certificates, graph_args):
-        G = get_specific_graph(courses, certificates, relevant_roles = graph_args[0], info_level = graph_args[1], starting_nodes = graph_args[2])
-        print("G", len(G), graph_args)
+    def retrieve_graph(self, courses, certificates, sources):
+        G = get_llm_graph(courses, certificates, sources)
         if len(G) == 0:
             graph = nx.DiGraph()
-            return graph, None, None
+            return graph
         return G
 
     def format_chat_history(self, html=True) -> str:
@@ -123,68 +104,90 @@ class BasicRAG:
                 chat_history_text += f"Assistant: {entry['content']}\n"
         return chat_history_text
 
-    def generate_response(self, query, documents: str):
+    def format_past_graphs(self, graphs: list[str]):
+        out = ''
+        for i, (query, graph) in enumerate(graphs):
+            out +=  f"At time {i}: User asked '{query}'. Resources in the resource graph at that time were {str(graph)}\n'"
+        return out
+
+    def generate_new_graph(self, query, cur_resources={}, history=[], resource_info=""):
         # Construct the prompt
         # Structured prompt with HTML output
-
-        chat_history_text = self.format_chat_history()
-
         prompt = f"""
-            YOU ARE AN ADOBE COURSE/CERTIFICATE RECCOMENDATION BOT. 
-            HOWEVER, YOU WILL ONLY USE THE SUPPORTING COURSE INFORMATION AND DOCUMENTS WHEN A USER ASKS FOR A COURSE RECCOMENDATION OR WHEN THEIR QUERY IS SPECIFIC. 
-            IN MOST CASES YOU WILL ASK FOLLOWUP QUESIONS TO GAUGE THEIR INTERESTS BETTER. 
-            
-            <p><strong>Role Assignment:</strong></p>
-            <ul>
-                <li>If the query is <strong>too vague or seeks general career advice</strong>, act as a <strong>Career Counselor</strong>. Ignore the documents and ask a <strong>clarifying question</strong> to guide the user toward a concrete query.</li>
-                <li>If the query <strong>asks about courses</strong> or Adobe offerings, act as a <strong>Course Explainer</strong>. Summarize the relevant courses from the retrieved <strong>documents</strong> and recommend the <strong>best fit course</strong> for the user's needs.</li>
-                <li>If the user <strong>wants a structured learning plan</strong>, act as a <strong>Career Planner</strong>. Use both <strong>documents</strong> and the <strong>graph</strong> to outline a <strong>logical learning trajectory</strong> with prerequisites.</li>
-            </ul>
+            You are a trajectory recommender whose job is, given a list of sources (course or certificate), output a valid trajectory that consists of a subset of those sources and that follow the below rules perfectly.
 
-            <h2>Previous Conversation:</h2>
-            {chat_history_text}
+            Source Types - There are two types of sources:
+            - Courses: format = <category> <level>
+            - Certificates: format = <category> <job role> <level>
+
+            Course Levels (in order):
+            - Foundations → Professional → Expert
+
+            A course can only require the previous level in the same category.
+            - Example: Adobe Analytics Foundations → Adobe Analytics Professional (valid)
+            - Adobe Analytics Foundations → Adobe Commerce Professional (invalid)
+
+            Certificate Levels (in order):
+            - Professional → Expert → Master
+
+            Certificates have the same prerequisite structure as courses.
+            - Job role is NOT used for prerequisites, but only show certificates matching the user's job role (or with job role All).
+
+            Cross-Dependencies (Courses → Certificates) - Courses can be prerequisites for certificates if the category matches:
+            - Foundations course → Professional certificate
+            - Professional course → Expert certificate
+            - Expert course → Master certificate
+
+            Summary of Rules:
+            - Match levels in order (no skipping) within the same category.
+            - Prerequisites MUST be in the SAME category AND follow the level order.
+            - Certificates must also match the user's job role (or be All).
+            - Course → Certificate prerequisites allowed as per cross-dependency mapping.
             
+            Resource History - The previous trajectories at previous iterations. Sometimes the user may want to reference an earlier trajectory, though sometimes they may not.
+
+            Current Resouces in Graph - This is the current trajectory the user is discussing. The user may want to add resources, remove resources, or completely disregard the current trajectory and come up with a new one.
+            You have the following operations:
+            - ADD: ONLY add resources to the current graph from resources listed in 'Resources you should know about'. You can ONLY add resources matching the type(s) the user requests—courses, certificates, study guides, or a combination. You CANNOT remove any resources unless performing alongside a SUBTRACT operation. (e.g., "Can you add more certificates related to Python programming?")
+            - SUBTRACT: ONLY remove resources from the current graph. This typically happens when the user explicitly requests fewer resources or asks to remove specific resources or resource types. You CANNOT add any resources unless performing alongside an ADD operation. (e.g., "Please remove any advanced-level courses." or "Take out the AWS certification.")
+            - OVERHAUL: Disregard the current graph entirely and create a completely new graph - You MUST generate new nodes, this cannot return an empty list. Usually chosen when the user requests a fresh start or completely switches fields/topics. Cannot be combined with any other operation. (e.g., "Create a new graph focused exclusively on machine learning certifications.")
+            - GO_BACK: Disregard the current graph and return to a previously saved graph state (timestep) stored in 'Resource History'. Unlike other operations, you must return an index (timestep), not a graph. Cannot be combined with other operations. (e.g., "Go back to the previous version of the graph," or "Undo the last change.")
+            - NO_CHANGE: Used when the user does not request any changes. Return the current graph without alterations. Cannot be combined with other operations. (e.g., "What courses do I currently have?" or "Just show me my current graph.")
+
+            Format the response to this as a set of the operations: {{ "OPERATION_1": ["COURSE_NAME_1", "COURSE_NAME_2", ...], "OPERATION_2": ["COURSE_NAME_3", "COURSE_NAME_4", ...] }}. If the operation is GO_BACK, return {{ GO_BACK: INDEX }}
+            
+            IT IS OF UTMOST IMPORTANCE THAT THESE RULES ARE FOLLOWED PERFECTLY WHEN OUTPUTTING A LIST OF NODES.
+            
+            <h2>Resources you should know about</h2>:
+            <p>
+            {resource_info}
+            </p>
+
+            Example:
+            <h2>User Query:</h2>
+            <p>This is too hard - can you give me easier classes?</p>
+            <h2>Current Resouces in Graph</h2>
+            <p>
+            ["Adobe Analytics Foundations", "Adobe Analytics Business Practitioner Professional", "Adobe Analytics Business Practitioner Expert", "Adobe Analytics Architect Master"]
+            </p>
+            <h2>Resource History:</h2>
+            <p>At time 0: User asked 'Give me a course trajectory to get good at Adobe Analytics'. Resources in the resource graph at that time were ['Adobe Analytics Foundations', 'Adobe Analytics Business Practitioner Professional', 'Adobe Analytics Business Practitioner Expert']</p>
+            <h2>Response:</h2>
+            <p>
+            {{ "SUBTRACT": ["Adobe Analytics Foundations"] }}
+            </p>
+            
+            The following is the true input:
             <h2>User Query:</h2>
             <p>{query}</p>
-            
-            <h2>Retrieved Course Information:</h2>
-            <p>{documents}</p>
-            
-            <p><strong>Instructions:</strong> Based on the query, follow the appropriate role:</p>
-            
-            <h3>1 Career Counselor Role</h3>
-            <p>If the query is vague or asks for career advice, <strong>ignore the retrieved documents</strong> and ask a clarifying question to help the user refine their request.</p>
-            <p>For example, ask: <em>"Would you like a course recommendation or a full learning trajectory?"</em></p>
-
-            <h3>2 Course Explainer Role</h3>
-            <p>If the user asks about courses, <strong>summarize the most relevant courses</strong> from the retrieved documents.</p>
-            <p>At the end, recommend the <strong>best course</strong> based on:</p>
-            <ul>
-                <li>The user's <strong>career goals</strong></li>
-                <li>Their <strong>educational background</strong></li>
-                <li>Their <strong>current skills</strong></li>
-                <li>Course metadata (difficulty level, prerequisites, topic)</li>
-            </ul>
-
-            <h3>3 Career Planner Role</h3>
-            <p>If the user asks for a <strong>course trajectory</strong>, use both the <strong>documents</strong> and the <strong>graph</strong> to create a step-by-step learning plan.</p>
-            <p>Ensure the plan follows logical <strong>prerequisite dependencies</strong>, starting with foundational courses and leading to expert certifications. <strong>ONLY</strong> refer to courses from the Retrieved Course Information section</p> 
-
-            <h2> Output Format: HTML</h2>
-            <ul>
-                <li>Print which Role you are acting under.</li>
-                <li>Wrap paragraphs in <code>&lt;p&gt;</code></li>
-                <li>Use <code>&lt;h2&gt;</code> and <code>&lt;h3&gt;</code> for sections</li>
-                <li>Use <code>&lt;ul&gt;&lt;li&gt;</code> for lists</li>
-                <li>End any responses with a list of the course and certification names mentioned in your response up until now, formatted as "<p hidden><strong>Resources Listed</strong>:['Resource 1', 'Resource 2', ...]</p>" If no resources are listed, output <p><strong>Resources Listed</strong>:[]</p>" </li>
-                <li>If any resource in "Resources Listed" should be followed in a specific order, please indicate that relationship in pairs formatted as "<p hidden><strong>Resources Ordered</strong>:['Resource 1 => Resource 2', 'Resource 2 => Resource 3', ...]</p>" If no resources are listed or there are no such relations, output <p><strong>Resources Ordered</strong>:[]</p>"</li>
-            </ul>
-            
-            <h2> Generate Your Response Below:</h2>
+            <h2>Current Resouces in Graph</h2>
+            <p>{str(cur_resources)}</p>
+            <h2>Resource History:</h2>
+            <p>{self.format_past_graphs(history)}</p>
+            <h2>Response:</h2>
             """
-
         try:
-            self.add_to_history("user", query)
+            print("Prompt:", prompt)
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -194,15 +197,26 @@ class BasicRAG:
                 temperature=0.7
             )
             assistant_response = response.choices[0].message.content
-            self.add_to_history("assistant", assistant_response)
             return assistant_response
         except Exception as e:
             error_str = f"An error occurred while generating a response: {e}"
             print(error_str)
             return error_str
         
-    def generate_general_response(self, query, documents: str, user_profile):
+    def generate_general_response(self, query, documents: str, user_profile, graph_str_raw=""):
         chat_history_text = self.format_chat_history()
+        print("QUERY", query)
+        print("documents", documents)
+        print("user_profile", user_profile)
+        print("graph_str_raw", graph_str_raw)
+
+        graph_str = ""
+        if graph_str_raw:
+            graph_str = f'''
+            <h3>Resource Graph: This is the user's current learning pathway, including courses, study guides, and certifications. Use this if the user's query relates to modify the graph or questions about the courses on the graph</h3>
+            <p>{graph_str}</p>
+            '''
+
         prompt = f"""
         <!-- YOU ARE AN INTELLIGENT COURSE AND CERTIFICATE RECOMMENDATION ASSISTANT FOR ADOBE USERS. USE THE USER’S BACKGROUND, PREVIOUS PLAN HISTORY, AND CURRENT QUERY TO EITHER GENERATE RECOMMENDATIONS, EXPLAIN ADOBE COURSES, OR ASK CLARIFYING QUESTIONS. -->
 
@@ -221,6 +235,8 @@ class BasicRAG:
 
         <h3>Retrieved Course & Certificate Documents, THIS IS IMPORTANT, this is all the relevant information from Adobe regarding this request. Please put your responses using this information:</h3>
         <p>{documents}</p>
+
+        {graph_str}
 
         <h2><strong>Instructions</strong></h2>
 
@@ -263,7 +279,6 @@ class BasicRAG:
         <h2><strong>Generate Your Response Below:</strong></h2>
         """
         try:
-            self.add_to_history("user", query)
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -273,7 +288,6 @@ class BasicRAG:
                 temperature=0.7
             )
             assistant_response = response.choices[0].message.content
-            self.add_to_history("assistant", assistant_response)
             return assistant_response
         except Exception as e:
             error_str = f"An error occurred while generating a response: {e}"
@@ -323,40 +337,73 @@ class BasicRAG:
         """Runs the full RAG pipeline: retrieves documents and generates a response."""
         bucket = self.find_bucket(query)
         if bucket == Bucket.IRRELEVANT:
-            return "I don't understand what you said. Can you please ask something related to Adobe?", None
+            default_str = "I don't understand what you said. Can you please ask something related to Adobe?"
+            self.add_to_history("user", query)
+            self.add_to_history("assistant", default_str)
+            return default_str, nx.DiGraph()
         elif bucket == Bucket.GENERAL:
+            print("BUCKET", bucket)
+            if len(self.current_graph) > 0:
+                _, e = graph_to_2d_array(self.current_nx_graph)
+                graph_str = display_edges(e)
+            else:
+                graph_str = ""
+        
             retrieved_docs = self.retrieve_documents(query, top_k)
-            response = self.generate_general_response(query, retrieved_docs, user_profile)
-            return response, None
+            response = self.generate_general_response(query, retrieved_docs, user_profile, graph_str)
+            self.add_to_history("user", query)
+            self.add_to_history("assistant", response)
+            return response, self.current_nx_graph
         else:
-            retrieved_docs = self.retrieve_documents(query, top_k)
-            response = self.generate_response(query, retrieved_docs)
+            #TODO: Integrate Chat History with graph history
+            #TODO: Allow for manipulation of study guides
 
-            resource_names = extract_resources(response)
-            resource_relations = extract_resources_relations(response)
+            rag_query = 'Current resources in graph: ' + ', '.join("'" + name + "'" for name in self.current_graph) + " User Query: " + query
+            retrieved_docs = self.retrieve_documents(rag_query, top_k=10)[1]
+            retrieved_docs.extend(self.retrieve_documents(query, top_k=5, omit_titles=[d['metadata']['title'] for d in retrieved_docs])[1])
+            # print(query)
+            # print(rag_query)
+            # print("Retrieved docs:", [d['metadata']['title'] for d in retrieved_docs], "Current docs:", self.current_graph)
+            # print("graph_list:", self.current_graph)
 
-            print("query", query)
-            print("response", response)
-            print("resource_names", resource_names)
-            print("resource_relations", resource_relations)
-            max_resources = 5
+            current_docs = [self.title2doc[g] for g in self.current_graph if g in self.current_graph] + retrieved_docs
+            resource_info = self.format_docs_context(current_docs)
 
-            if resource_names:
-                job_roles, info_level = self.generate_graph_args(query)
-                if info_level != "high":
-                    max_resources = 1
-                
-                graph_args = [job_roles, info_level, resource_names[:max_resources]]
-                graph, context, category = self.retrieve_graph(query, courses, certificates, graph_args)
+            raw_graph_ops = self.generate_new_graph(query, self.current_graph, self.past_graphs, resource_info)
+            graph_ops = extract_dict_from_string(raw_graph_ops)
+            if 'ADD' in graph_ops:
+                self.current_graph.extend([g for g in graph_ops['ADD'] if g in self.title2doc])
+            if 'SUBTRACT' in graph_ops:
+                self.current_graph = [source for source in self.current_graph if source not in graph_ops['SUBTRACT']]
+            if 'OVERHAUL' in graph_ops:
+                self.current_graph = [g for g in graph_ops['OVERHAUL'] if g in self.title2doc]
+            if 'GO_BACK' in graph_ops:
+                self.current_graph = self.past_graphs[int(graph_ops['GO_BACK'])][1]
+
+            if self.current_graph:
+                graph = self.retrieve_graph(courses, certificates, self.current_graph)
+                self.current_nx_graph = graph
+                _, e = graph_to_2d_array(graph)
+                graph_str = display_edges(e)
             else:
                 graph = nx.DiGraph()
-                category = None
-            return response, graph
+                graph_str = ""
+            
+            retrieved_docs = [doc for doc in retrieved_docs if doc['metadata']['title'] in self.current_graph]
+            
+            print("graph ops:", graph_ops)
+            print("Current graph resources:", self.current_graph)
+            self.past_graphs.append((query, self.current_graph))
 
-    def run_graph_rag_pipeline(self, query, courses, certificates):
-        category = self.get_category(query)
-        response = self.generate_response_based_on_category(query, category, courses, certificates)
-        return response
+            if len(self.current_graph) > 0:
+                n, e = graph_to_2d_array(graph)
+                graph_str = display_edges(e)
+                self.current_nx_graph = graph
+
+            response = self.generate_general_response(query, retrieved_docs, user_profile, graph_str)
+            self.add_to_history("user", query)
+            self.add_to_history("assistant", response)
+            return response, graph
 
     def grouper(self, query):
         # Construct the prompt
@@ -369,43 +416,43 @@ class BasicRAG:
 
         A USER QUERY IS CATEGORIZED INTO ONE OF THE FOLLOWING TYPES:
 
-        1. **Irrelevant Request**  
+        1. Irrelevant Request  
         The query is not related to Adobe courses or certificates, or is general conversation with no actionable request.
 
-        **Examples:**
+        Examples:
         - "What's the weather like today?"
         - "Tell me a joke."
         - "Can you help me fix my printer?"
 
-        2. **General Request**  
-        The query is exploratory, asking for information about Adobe programs, courses, or certificates without requesting a specific learning path.
+        2. General Request  
+        The query is exploratory, asking for information about Adobe programs, courses, or certificates without requesting a specific learning path. ONLY default to this when the user wants nothing to do with the current graph, in which case default to the third option
 
-        **Examples:**
+        Examples:
         - "What types of courses does Adobe offer?"
         - "Can you tell me more about the Adobe Analytics Professional course?"
         - "Are there any certificates for digital marketing?"
 
-        3. **Modifying or Creating a Course Graph/Trajectory**  
+        3. Modifying or Creating a Course Graph/Trajectory
         The user wants to receive a recommended course/certificate path or make changes to a previously suggested learning trajectory.
 
-        **Examples:**
+        Examples:
         - "What’s the best path to reach Adobe Analytics Expert?"
         - "I already completed Adobe Commerce Foundations, what should I take next?"
         - "Can you help me update my learning plan for a Master certificate in Adobe Analytics?"
-
+        - "I am new to adobe commerce - what is a full learning journey, from start to finish?"
+        
         We will provide the previous conversation history and user query below.
 
-        **Previous Conversation:**  
+        Previous Conversation:  
         "{chat_history_text}"
 
-        **User Query:**  
+        User Query:  
         "{query}"
 
         Respond with ONLY a number: `1`, `2`, or `3` — indicating the category of the request.  
         No additional words, explanations, or symbols.
         """
         try:
-            self.add_to_history("user", query)
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -416,7 +463,6 @@ class BasicRAG:
                 seed=42
             )
             assistant_response = response.choices[0].message.content
-            self.add_to_history("assistant", assistant_response)
             return assistant_response
         except Exception as e:
             error_str = f"An error occurred while generating a response: {e}"
@@ -424,7 +470,7 @@ class BasicRAG:
             return error_str
     
     def find_bucket(self, query: str):
-        response = self.first_pass(query).strip()
+        response = self.grouper(query).strip()
 
         if "1" in response:
             self.role = Bucket.IRRELEVANT
