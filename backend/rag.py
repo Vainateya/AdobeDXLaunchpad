@@ -231,7 +231,7 @@ class BasicRAG:
 
         <h1>Adobe Learning Assistant</h1>
 
-        <h2><strong>Here is all the context you should learn from first</strong></h2>
+        <h2><strong>Here is all the context you need</strong></h2>
 
         <h3>This is the User Profile, please use it to make a tailored response:</h3>
         <p>{str(user_profile)}</p>
@@ -246,6 +246,8 @@ class BasicRAG:
         <p>{documents}</p>
 
         {graph_str}
+
+        <h3>ENSURE THAT YOU ONY PULL INFORMATION FROM THE LEARNING PATHWAY AND DISREGARD DOCUMENTS IF LEARNING PATH IS PRESENT (ITS MORE TAILORED)</h3>
 
         <h2><strong>Instructions</strong></h2>
 
@@ -277,6 +279,8 @@ class BasicRAG:
             <li>Use <code>&lt;h2&gt;</code>, <code>&lt;h3&gt;</code> for sectioning.</li>
             <li>Use <code>&lt;ul&gt;&lt;li&gt;</code> for lists.</li>
         </ul>
+
+        <h2><strong>ENSURE THAT ANY COURSES YOU RECCOMEND ONLY COME FROM THE GRAPH IF ITS PROVIDED!</strong></h2>
 
         <h2><strong>Generate Your Response Below:</strong></h2>
         """
