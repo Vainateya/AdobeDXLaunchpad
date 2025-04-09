@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_caching import Cache
+import os
 
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from tqdm import tqdm
@@ -23,6 +24,23 @@ from rag import *
 #     model_kwargs={"device": "cpu"},
 #     encode_kwargs={"normalize_embeddings": True},
 # )
+
+class TextDocument:
+    def __init__(self, filepath: str):
+        self.filepath = filepath
+        self.display = os.path.basename(filepath).replace(".txt", "")
+        with open(filepath, "r", encoding="utf-8") as f:
+            self.content = f.read()
+
+# Create separate DocumentStore for program info documents
+program_store = DocumentStore(similarity_metric="cosine", storage_path="./supplement_docs")
+
+# Add .txt documents to the program_store
+for fname in os.listdir("./supplemental_sources"):
+    if fname.endswith(".txt"):
+        doc = TextDocument(os.path.join("./supplemental_sources", fname))
+        program_store.add_document(doc)
+        
 
 courses = []
 certificates = []
@@ -75,7 +93,7 @@ if store.collection.count() == 0:
         store.add_document(certificate)
     print(f"Total documents after reloading: {store.collection.count()}")
 
-rag = BasicRAG(document_store=store)
+rag = BasicRAG(document_store=store, supplement_store = program_store)
 
 @app.route('/api/survey', methods=['POST'])
 def survey():

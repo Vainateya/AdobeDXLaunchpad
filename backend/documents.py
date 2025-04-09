@@ -35,7 +35,7 @@ class DocumentStore:
         )
         return response.data[0].embedding
     
-    def process_source(self, source: Union['Course', 'Certificate']) -> Dict:
+    def process_source(self, source: Union['Course', 'Certificate', 'TextDocument']) -> Dict:
         """Extracts relevant text and metadata from Course or Certificate objects."""
         if isinstance(source, Course):
             text = f"{source.objectives} " + " ".join([m.description for m in source.modules])
@@ -57,7 +57,14 @@ class DocumentStore:
                 "level": source.level,
                 "job_role": source.job_role,
                 "prereq": source.prereq,
-                "study_materials": "; ".join(source.study_materials)  # ✅ Convert list to a string
+                "study_materials": "; ".join(source.study_materials)
+            }
+        elif isinstance(source, TextDocument):
+            text = source.content
+            metadata = {
+                "type": "program_info",
+                "title": source.display,
+                "filename": os.path.basename(source.filepath)
             }
         else:
             raise ValueError("Unsupported document type.")

@@ -64,8 +64,9 @@ class BasicRAG:
     from ChromaDB based on a user query and generates a response using OpenAI's API.
     """
     
-    def __init__(self, document_store: DocumentStore, model: str = "gpt-4o-mini"):
+    def __init__(self, document_store: DocumentStore, supplement_store: DocumentStore, model: str = "gpt-4o-mini"):
         self.document_store = document_store
+        self.supplement_store = supplement_store
         self.model = model
         self.client = OpenAI()
         self.chat_history = [] 
@@ -78,13 +79,16 @@ class BasicRAG:
     def retrieve_documents(self, query: str, top_k: int = 5):
         """Fetches the top-k most relevant documents from the document store and formats metadata."""
         retrieved_docs = self.document_store.query_documents(query_text=query, top_k=top_k)
+        supplement_docs = self.supplement_store.query_documents(query_text=query, top_k=top_k)
         # Format all metadata dynamically
+        # Combine both lists
+        all_docs = retrieved_docs + supplement_docs
         context = "\n\n".join(
             [
                 f"<h3>{doc['metadata']['title']}</h3>" +
                 "".join(f"<p><strong>{key.replace('_', ' ').title()}:</strong> {value}</p>"
                         for key, value in doc['metadata'].items() if key != "title")
-                for doc in retrieved_docs
+                for doc in all_docs
             ]
         )
         return context
