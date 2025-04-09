@@ -74,6 +74,7 @@ export default function Home() {
   const [showSurvey, setShowSurvey] = useState(false);
   const [isCertified, setIsCertified] = useState(null); // yes or no
   const [experienceYears, setExperienceYears] = useState("");
+  const [glowActive, setGlowActive] = useState(true);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -81,7 +82,10 @@ export default function Home() {
       textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
     }
   }, [chatMessage]);
-
+  useEffect(() => {
+    const timer = setTimeout(() => setGlowActive(false), 5000);
+    return () => clearTimeout(timer);
+}, []);
   const handleSendMessage = () => {
     if (!chatMessage.trim()) return;
     setLoading(true);
@@ -183,12 +187,12 @@ export default function Home() {
         </button>
       )}
       {/* Bottom-left Survey Button */}
-      <button
+      {/* <button
         onClick={() => setShowSurvey(true)}
         className="fixed bottom-6 left-6 bg-[#EB1000] hover:bg-red-700 text-white px-4 py-2 rounded-full shadow-lg z-50"
       >
         Answer a Few Questions
-      </button>
+      </button> */}
 
       {showSurvey && (
         <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center">
@@ -453,6 +457,12 @@ export default function Home() {
           </button>
         </div>
       </div>
+	<button
+        className="glow-button fixed bottom-6 left-6 z-50 wiggle-once"
+        onClick={() => setShowSurvey(true)}
+        >
+        Answer a Few Questions
+    </button>
     </div>
   );
 }
