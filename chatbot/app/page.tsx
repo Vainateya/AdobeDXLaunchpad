@@ -147,7 +147,9 @@ export default function Home() {
         id: String(nodeData.display),
         data: {
           ...nodeData, // includes type, display, data
-          label: nodeData.display, // restore label for rendering
+          label: nodeData.type === "course" || nodeData.type === "certificate"
+			? `${nodeData.display} (${nodeData.type === "course" ? "Course" : "Certification"})`
+			: nodeData.display,
         },
         position: {
           x: nodeOrigin[0] + colIndex * 200,
