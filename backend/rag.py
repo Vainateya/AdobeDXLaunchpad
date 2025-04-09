@@ -22,7 +22,6 @@ def extract_resources(text):
     """
     Parameters:
         text (str): The body of text containing the substring.
-        
     Returns:
         list: The extracted list of strings, or None if not found.
     """
