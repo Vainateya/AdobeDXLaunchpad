@@ -2,5 +2,6 @@ dependency_graph/.env
 **/chroma_storage/**
 **/__pycache__/**
 .venv/*
-
+key.txt
 backend/pickels/*
+backend/.env

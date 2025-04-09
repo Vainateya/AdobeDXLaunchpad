@@ -26,6 +26,9 @@ def load_sources_pickle(filename):
         sources = pickle.load(f)
     return sources
 
+def get_certificate_and_study(filename):
+    cert = Certificate(filename)
+
 class Source:
     def __init__(self, category: str, level: str, job_role: str, display: str, all_text: str, link: str = ''):
         self.category = category
@@ -143,10 +146,13 @@ class Course(Source):
     def is_prereq_to(self, other_source):
         if self.category != other_source.category:
             return False
+        
         if type(other_source) == Certificate:
             return self.certificate_levels.index(other_source.level) >= self.course_levels.index(self.level)
-        else:
+        elif type(other_source) == Course:
             return self.course_levels.index(other_source.level) == self.course_levels.index(self.level) + 1
+        else:
+            return False
     
     def to_dict(self):
         """Convert the Course object to a dictionary."""
@@ -214,6 +220,7 @@ class Certificate(Source):
                 details += detail + ', '
             study_materials_parsed[-1] += details
         self.study_materials = study_materials_parsed
+        self.study = Study(self)
 
     def get_embedding(self, model):
         relevant_text = [self.prereq] + [i for i in self.study_materials]
@@ -226,8 +233,10 @@ class Certificate(Source):
             return False
         if type(other_source) == Course:
             return self.course_levels.index(other_source.level) >= self.certificate_levels.index(self.level) + 1
-        else:
+        elif type(other_source) == Certificate:
             return self.certificate_levels.index(other_source.level) == self.certificate_levels.index(self.level) + 1
+        else:
+            return False
 
     def _rem_big_spaces(self, text):
         text = text.replace("\n", "")
@@ -324,3 +333,13 @@ class Certificate(Source):
             "study_materials": '\n'.join(self.study_materials)
         })
         return certificate_dict
+    
+class Study(Source):
+    def __init__(self, cert: Certificate):
+        link = cert.link
+        if '?' in link:
+            link += '&tab=certificate4'
+        else:
+            link += '?tab=certificate4'
+        super().__init__(cert.category, cert.level, cert.job_role, cert.display + ' Study Materials', cert.all_text, link)
+        self.type = "study"

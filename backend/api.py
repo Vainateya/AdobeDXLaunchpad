@@ -3,15 +3,8 @@ from flask_cors import CORS
 from flask_caching import Cache
 import os
 
-from langchain_community.embeddings import HuggingFaceEmbeddings
 from tqdm import tqdm
-import numpy as np
-import networkx as nx
-from sklearn.metrics.pairwise import cosine_similarity
-import matplotlib.pyplot as plt
-from bs4 import BeautifulSoup
 import os
-import streamlit as st
 import graphviz as graphviz
 
 from utils import *
@@ -106,7 +99,7 @@ def get_graph():
     data = request.get_json()
     message = data['category']
     
-    response, category, graph = rag.run_rag_pipeline(message, courses, certificates, user_data)
+    response, graph = rag.run_rag_pipeline(message, courses, certificates, user_data)
     if len(graph) > 0:
         nodes, edges = graph_to_2d_array(graph)
     else:
