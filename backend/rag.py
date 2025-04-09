@@ -227,9 +227,6 @@ class BasicRAG:
         <h3>This is the User Profile, please use it to make a tailored response:</h3>
         <p>{user_profile}</p>
 
-        <h3>Graph History (Past Learning Plans):</h3>
-        <p>{graph_history}</p>
-
         <h3>This is the chat history, please use it to learn about where the conversation evolved from:</h3>
         {chat_history_text}
 
