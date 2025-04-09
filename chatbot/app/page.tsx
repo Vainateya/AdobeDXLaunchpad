@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { ReactFlow, Background } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { PulseLoader } from "react-spinners";
+import "./glowButton.css";
 
 const nodeOrigin = [200, 20];
 
@@ -73,6 +74,7 @@ const [showHistory, setShowHistory] = useState(false);
 const [showSurvey, setShowSurvey] = useState(false);
 const [isCertified, setIsCertified] = useState(null); // yes or no
 const [experienceYears, setExperienceYears] = useState("");
+const [glowActive, setGlowActive] = useState(true);
 
 useEffect(() => {
 	if (textareaRef.current) {
@@ -80,6 +82,11 @@ useEffect(() => {
 	textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
 	}
 }, [chatMessage]);
+
+useEffect(() => {
+	const timer = setTimeout(() => setGlowActive(false), 5000);
+	return () => clearTimeout(timer);
+}, []);
 
 const handleSendMessage = () => {
 	if (!chatMessage.trim()) return;
@@ -176,12 +183,12 @@ return (
 	</button>
 	)}
 	{/* Bottom-left Survey Button */}
-	<button
+	{/* <button
 		onClick={() => setShowSurvey(true)}
 		className="fixed bottom-6 left-6 bg-[#EB1000] hover:bg-red-700 text-white px-4 py-2 rounded-full shadow-lg z-50"
 		>
 		Answer a Few Questions
-	</button>
+	</button> */}
 
 	{showSurvey && (
 	<div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center">
@@ -435,7 +442,7 @@ return (
 			className={`text-white font-medium text-lg px-5 py-3 transition-all rounded-lg ${
 			loading
 				? "bg-gray-500 cursor-not-allowed"
-				: "bg-[#EB1000] hover:bg-red-700"
+				: "bg-[#EB1000] hover:bg-[#EB1000]"
 			}`}
 			onClick={handleSendMessage}
 			disabled={loading}
@@ -444,6 +451,18 @@ return (
 		</button>
 		</div>
 	</div>
+	
+	<button
+		className="glow-button fixed bottom-6 left-6 z-50 wiggle-once"
+		onClick={() => setShowSurvey(true)}
+		>
+		Answer a Few Questions
+	</button>
 	</div>
+	
+	
+	
+
+	
 );
 }
