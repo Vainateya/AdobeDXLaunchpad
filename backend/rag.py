@@ -76,22 +76,29 @@ class BasicRAG:
         """Appends a new entry to the chat history."""
         self.chat_history.append({"role": role, "content": content})
 
-    def retrieve_documents(self, query: str, top_k: int = 5):
-        """Fetches the top-k most relevant documents from the document store and formats metadata."""
-        retrieved_docs = self.document_store.query_documents(query_text=query, top_k=top_k)
-        supplement_docs = self.supplement_store.query_documents(query_text=query, top_k=top_k)
-        # Format all metadata dynamically
-        # Combine both lists
-        all_docs = retrieved_docs + supplement_docs
+    def retrieve_documents(self, query: str, top_k: int = 5, exclude_supplement: bool = False):
+        """Fetches the top-k most relevant documents from the document store and formats metadata.
+        If exclude_supplement=True, excludes supplemental docs (only uses course/cert content)."""
+
+        all_docs = self.document_store.query_documents(query_text=query, top_k=top_k)
+
+        if not exclude_supplement:
+            supplement_docs = self.supplement_store.query_documents(query_text=query, top_k=top_k)
+            all_docs += supplement_docs  # same as all_docs = all_docs + supplement_docs
+
         context = "\n\n".join(
             [
                 f"<h3>{doc['metadata']['title']}</h3>" +
-                "".join(f"<p><strong>{key.replace('_', ' ').title()}:</strong> {value}</p>"
-                        for key, value in doc['metadata'].items() if key != "title")
+                "".join(
+                    f"<p><strong>{key.replace('_', ' ').title()}:</strong> {value}</p>"
+                    for key, value in doc['metadata'].items() if key != "title"
+                )
                 for doc in all_docs
             ]
         )
+
         return context
+
 
     def retrieve_graph(self, query, courses, certificates, graph_args, top_k = 1):
         category = self.document_store.get_category_from_best_document(query)
@@ -347,7 +354,7 @@ class BasicRAG:
             response = self.generate_general_response(query, retrieved_docs, user_profile)
             return response, None
         else:
-            retrieved_docs = self.retrieve_documents(query, top_k)
+            retrieved_docs = self.retrieve_documents(query, top_k, True)
             response = self.generate_response(query, retrieved_docs)
 
             resource_names = extract_resources(response)
