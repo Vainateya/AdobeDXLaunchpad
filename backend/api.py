@@ -89,16 +89,49 @@ def survey():
 
 @app.route('/api/get_graph', methods=['POST'])
 def get_graph():
+    global current_graph_items
+
     data = request.get_json()
     message = data['category']
     
     response, graph = rag.run_rag_pipeline(message, courses, certificates, user_data)
+
     if len(graph) > 0:
         nodes, edges = graph_to_2d_array(graph)
+
+        # Flatten and extract node names
+        current_graph_items = [
+            node['display']
+            for row in nodes
+            for node in row
+            if 'display' in node
+        ]
     else:
         nodes, edges = [], []
-    return jsonify({'nodes': nodes, 'edges': edges, 'message': response})
+        current_graph_items = []
+    
+    return jsonify({"current_items": current_graph_items}), 200
+
     # Perform any server-side actions here
+
+@app.route('/api/get_current_graph', methods=['GET'])
+def get_current_graph():
+    print("📌 Current Graph Items:", current_graph_items)
+    
+
+@app.route('/api/set_current_graph', methods=['POST'])
+def set_current_graph():
+    data = request.get_json()
+    nodes_nested = data.get('nodes', [])
+    nodes = [node for sublist in nodes_nested for node in sublist]
+    print("📦 Raw nodes from frontend:", nodes)
+    current_items = [node['data']['display'] for node in nodes if 'data' in node and 'display' in node['data']]
+    print("📌 Updated Current Graph Items from frontend:", current_items)
+
+    # Optionally store this if you want it accessible in another route
+    user_data['current_graph_items'] = current_items
+
+    return jsonify({"status": "ok", "current_items": current_items}), 200
 
 if __name__ == '__main__':
     app.run(debug=True)

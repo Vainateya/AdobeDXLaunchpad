@@ -298,17 +298,32 @@ export default function Home() {
                 <div
                   key={index}
                   onClick={() => {
-                    updateGraph(item.nodes, item.edges);
-                    setCurrentGraphIndex(index);
-                    setShowHistory(false);
-                    const target = messageRefs.current[item.messageIndex];
-                    if (target) {
-                      target.scrollIntoView({
-                        behavior: "smooth",
-                        block: "start",
-                      });
-                    }
-                  }}
+					updateGraph(item.nodes, item.edges);
+					setCurrentGraphIndex(index);
+					setShowHistory(false);
+				  
+					// Scroll to corresponding chat message
+					const target = messageRefs.current[item.messageIndex];
+					if (target) {
+					  target.scrollIntoView({ behavior: "smooth", block: "start" });
+					}
+				  
+					// Fetch current graph items from backend
+					// Send current nodes to backend
+					console.log(" Sending nodes to backend:", item.nodes);
+					console.log(" Updated graph items sent to backend:", item.nodes);
+					fetch("http://127.0.0.1:5000/api/set_current_graph", {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({ nodes: item.nodes }),
+					})
+					.then((res) => res.json())
+					.then((data) => {
+					console.log(" Updated graph items sent to backend:", data.current_items);
+					})
+					.catch((err) => console.error("Error sending graph items:", err));
+  
+				  }}
                   className={`text-white text-sm p-3 rounded mb-2 cursor-pointer ${
                     index === currentGraphIndex
                       ? "bg-[#EB1000]"
