@@ -29,6 +29,37 @@ from utils import *
 # }
 # job_role_query = "I want to primarily work with digital marketing, such as advertising."
 
+sample = ['Adobe Analytics Foundations', 'Adobe Analytics Architect Master', 'Adobe Analytics Business Practitioner Expert', 'Adobe Analytics Business Practitioner Professional', 'Adobe Analytics Developer Expert', 'Adobe Analytics Developer Professional']
+
+def get_llm_graph(courses, certificates, sources=sample):
+    """
+    Create a directed graph based on a list of relevant sources given by a llm call
+    """
+
+    G = nx.DiGraph()
+    relevant = []
+    for i in courses + certificates:
+        if i.display in sources:
+            relevant.append(i)
+            G.add_node(i)
+            if type(i) == Certificate:
+                G.add_node(i.study)
+                G.add_edge(i.study, i)
+    
+    for src1 in relevant:
+        for src2 in relevant:
+            if src1 == src2:
+                continue
+            if src1.is_prereq_to(src2):
+                if type(src2) == Certificate:
+                    G.add_edge(src1, src2.study)
+                else:
+                    G.add_edge(src1, src2)
+    
+    return G
+    
+
+
 def get_specific_graph(courses, certificates, relevant_roles, info_level, starting_nodes):
     """
     Create a directed graph of courses and certificates based on prerequisite relationships.
@@ -62,6 +93,9 @@ def get_specific_graph(courses, certificates, relevant_roles, info_level, starti
         if src.display in starting_nodes and src not in G:
             queue.append(src)
             G.add_node(src)
+            if type(src) == Certificate:
+                G.add_node(src.study)
+                G.add_edge(src.study, src)
 
             if info_level == 'low':
                 pass
@@ -78,6 +112,10 @@ def get_specific_graph(courses, certificates, relevant_roles, info_level, starti
                                 queue.append(src)
                                 if type(src) == Certificate and src.display not in starting_nodes:
                                     certificate_in_graph = True
+                                if type(src) == Certificate:
+                                    G.add_node(src.study)
+                                    G.add_edge(src.study, src)
+                                    src = src.study
                             G.add_edge(node, src)
 
             if info_level == 'high':
@@ -89,8 +127,13 @@ def get_specific_graph(courses, certificates, relevant_roles, info_level, starti
                             if src not in G:
                                 G.add_node(src)
                                 queue.append(src)
-                            G.add_edge(node, src)
-
+                                if type(src) == Certificate:
+                                    G.add_node(src.study)
+                                    G.add_edge(src.study, src)
+                            if type(src) == Certificate:
+                                G.add_edge(node, src.study)
+                            else:
+                                G.add_edge(node, src)
 
     pos = nx.circular_layout(G)
     nx.draw(G, pos, with_labels=True, font_size=6, node_size=40)
@@ -122,10 +165,10 @@ def graph_to_2d_array(G):
     for node, row in row_map.items():
         if type(node) == Course:
             node_type = 'course'
-            desc = f'Course objectives: {node.objectives}'
-        else:
+        elif type(node) == Certificate:
             node_type = 'certificate'
-            desc = f'Prerequisites: {node.prereq}'
+        else:
+            node_type = 'study'
         graph_2d[row].append({'type': node_type, 'display': node.display, 'data': node.to_dict()})
 
     edges_2d = []

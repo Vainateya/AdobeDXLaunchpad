@@ -97,4 +97,15 @@ class DocumentStore:
         """Deletes a document from ChromaDB by ID."""
         self.collection.delete(ids=[document_id])
 
-
+    def get_all_documents(self) -> List[Dict]:
+        """Returns all stored documents with their full metadata and text."""
+        results = self.collection.get(include=['metadatas', 'documents'])
+        
+        documents = []
+        for i in range(len(results["ids"])):
+            documents.append({
+                "id": results["ids"][i],
+                "metadata": results["metadatas"][i],
+                "text": results["documents"][i] if results["documents"] else "[No text stored]"
+            })
+        return documents

@@ -2,20 +2,12 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_caching import Cache
 
-from langchain_community.embeddings import HuggingFaceEmbeddings
 from tqdm import tqdm
-import numpy as np
-import networkx as nx
-from sklearn.metrics.pairwise import cosine_similarity
-import matplotlib.pyplot as plt
-from bs4 import BeautifulSoup
 import os
-import streamlit as st
-import graphviz as graphviz
 
 from utils import *
 from graph_utils import *
-from rag import *
+from rag_new import *
 
 # embedding_model = HuggingFaceEmbeddings(
 #     model_name="thenlper/gte-small",
@@ -88,7 +80,7 @@ def get_graph():
     data = request.get_json()
     message = data['category']
     
-    response, category, graph = rag.run_rag_pipeline(message, courses, certificates)
+    response, graph = rag.run_rag_pipeline(message, courses, certificates)
     if len(graph) > 0:
         nodes, edges = graph_to_2d_array(graph)
     else:
