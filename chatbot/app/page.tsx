@@ -14,7 +14,7 @@ const MessageList = ({
 }: {
 	className: string;
 	messages: { from: string; text: string }[];
-	messageRefs: React.MutableRefObject<(HTMLDivElement | null)[]>;
+	messageRefs: React.RefObject<(HTMLDivElement | null)[]>;
 }) => {
 const messageEndRef = useRef(null);
 useEffect(() => {
@@ -70,6 +70,9 @@ const messageRefs = useRef<(HTMLDivElement | null)[]>([]);
 const [graphHistory, setGraphHistory] = useState([]);
 const [currentGraphIndex, setCurrentGraphIndex] = useState(null);
 const [showHistory, setShowHistory] = useState(false);
+const [showSurvey, setShowSurvey] = useState(false);
+const [isCertified, setIsCertified] = useState(null); // yes or no
+const [experienceYears, setExperienceYears] = useState("");
 
 useEffect(() => {
 	if (textareaRef.current) {
@@ -163,7 +166,7 @@ const updateGraph = (nodes, edges) => {
 
 return (
 	<div className="grid grid-cols-2 gap-4 p-8 min-h-screen font-sans relative">
-	{/* 📜 History Button */}
+	{/* History Button */}
 	{!showHistory && (
 	<button
 		onClick={() => setShowHistory(true)}
@@ -172,6 +175,93 @@ return (
 		History
 	</button>
 	)}
+	{/* Bottom-left Survey Button */}
+	<button
+		onClick={() => setShowSurvey(true)}
+		className="fixed bottom-6 left-6 bg-[#EB1000] hover:bg-red-700 text-white px-4 py-2 rounded-full shadow-lg z-50"
+		>
+		Answer a Few Questions
+	</button>
+
+	{showSurvey && (
+	<div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center">
+		<div className="bg-[#1f1f1f] rounded-xl p-6 w-[400px] max-w-full shadow-2xl text-white relative">
+		<button
+			className="absolute top-2 right-3 text-gray-300 hover:text-white text-lg"
+			onClick={() => setShowSurvey(false)}
+		>
+			✕
+		</button>
+		<h2 className="text-xl font-semibold mb-4">Quick Questions</h2>
+
+		{/* Question 1 */}
+		<div className="mb-4">
+			<label className="block text-sm font-medium mb-2">
+			1. Are you already certified?
+			</label>
+			<div className="flex gap-4">
+			<button
+				className={`px-4 py-2 rounded ${
+				isCertified === "yes" ? "bg-[#EB1000]" : "bg-[#333]"
+				}`}
+				onClick={() => setIsCertified("yes")}
+			>
+				Yes
+			</button>
+			<button
+				className={`px-4 py-2 rounded ${
+				isCertified === "no" ? "bg-[#EB1000]" : "bg-[#333]"
+				}`}
+				onClick={() => setIsCertified("no")}
+			>
+				No
+			</button>
+			</div>
+		</div>
+
+		{/* Question 2 */}
+		<div className="mb-4">
+			<label className="block text-sm font-medium mb-2">
+			2. Years of experience in your field:
+			</label>
+			<input
+			type="number"
+			min="0"
+			value={experienceYears}
+			onChange={(e) => setExperienceYears(e.target.value)}
+			className="w-full px-3 py-2 rounded bg-white text-black"
+			placeholder="e.g., 3"
+			/>
+		</div>
+
+		{/* Submit (optional) */}
+		<button
+			className="mt-2 bg-[#EB1000] hover:bg-red-700 text-white px-4 py-2 rounded"
+			onClick={() => {
+				const surveyData = {
+				certified: isCertified,
+				experience_years: experienceYears,
+				};
+			
+				fetch("http://127.0.0.1:5000/api/survey", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(surveyData),
+				})
+				.then((res) => res.json())
+				.then((data) => {
+					console.log("Survey submitted:", data);
+				})
+				.catch((err) => console.error("Survey submission failed:", err))
+				.finally(() => setShowSurvey(false));
+			}}
+		>
+			Submit
+		</button>
+		</div>
+	</div>
+	)}
+
 
 	{/* History Sidebar */}
 	{showHistory && (

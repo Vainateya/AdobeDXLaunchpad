@@ -80,7 +80,8 @@ rag = BasicRAG(document_store=store)
 @app.route('/api/survey', methods=['POST'])
 def survey():
     data = request.get_json()
-    user_data = data
+    print("Survey received:", data)
+    return jsonify({"status": "ok", "received": data}), 200
 
 @app.route('/api/get_graph', methods=['POST'])
 def get_graph():
