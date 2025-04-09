@@ -268,7 +268,7 @@ export default function Home() {
             {/* Question 2 */}
             <div className="mb-4">
               <label className="block text-sm font-medium mb-2">
-                2. Years of experience in your field:
+                3. Years of experience in your field:
               </label>
               <input
                 type="number"
@@ -510,7 +510,7 @@ export default function Home() {
         </div>
       </div>
 	<button
-        className="glow-button fixed bottom-6 left-6 z-50 wiggle-once"
+        className="glow-button fixed hover:bg-red-700 bottom-6 left-6 z-50 wiggle-once"
         onClick={() => setShowSurvey(true)}
         >
         Answer a Few Questions
