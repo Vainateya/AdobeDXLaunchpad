@@ -276,12 +276,6 @@ class BasicRAG:
             <li>Use <code>&lt;p&gt;</code> for paragraphs.</li>
             <li>Use <code>&lt;h2&gt;</code>, <code>&lt;h3&gt;</code> for sectioning.</li>
             <li>Use <code>&lt;ul&gt;&lt;li&gt;</code> for lists.</li>
-            <li>End your output with:
-                <ul>
-                    <li><code>&lt;p hidden&gt;&lt;strong&gt;Resources Listed&lt;/strong&gt;:[...]&lt;/p&gt;</code></li>
-                    <li><code>&lt;p hidden&gt;&lt;strong&gt;Resources Ordered&lt;/strong&gt;:[...]&lt;/p&gt;</code></li>
-                </ul>
-            </li>
         </ul>
 
         <h2><strong>Generate Your Response Below:</strong></h2>

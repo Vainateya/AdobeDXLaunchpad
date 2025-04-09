@@ -5,7 +5,6 @@ import os
 
 from tqdm import tqdm
 import os
-import graphviz as graphviz
 
 from utils import *
 from graph_utils import *
@@ -109,8 +108,14 @@ def get_graph():
     else:
         nodes, edges = [], []
         current_graph_items = []
-    
-    return jsonify({"current_items": current_graph_items}), 200
+
+    return jsonify({
+        "nodes": nodes,
+        "edges": edges,
+        "message": response,
+        "current_items": current_graph_items
+    }), 200
+
 
     # Perform any server-side actions here
 
