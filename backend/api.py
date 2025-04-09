@@ -2,16 +2,8 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_caching import Cache
 
-from langchain_community.embeddings import HuggingFaceEmbeddings
 from tqdm import tqdm
-import numpy as np
-import networkx as nx
-from sklearn.metrics.pairwise import cosine_similarity
-import matplotlib.pyplot as plt
-from bs4 import BeautifulSoup
 import os
-import streamlit as st
-import graphviz as graphviz
 
 from utils import *
 from graph_utils import *
@@ -38,6 +30,8 @@ certificate_htmls_location = '../dependency_graph/certificate_htmls'
 save_folder = "pickels"
 certificates_save_location = os.path.join(save_folder, "certificates.pkl")
 courses_save_location = os.path.join(save_folder, "courses.pkl")
+
+user_data = {}
 
 if not os.path.exists(courses_save_location) or not os.path.exists(certificates_save_location):
     print("Scraping resources...")
@@ -74,6 +68,12 @@ if store.collection.count() == 0:
     print(f"Total documents after reloading: {store.collection.count()}")
 
 rag = BasicRAG(document_store=store)
+
+@app.route('/api/survey', methods=['POST'])
+def survey():
+    data = request.get_json()
+    print("Survey received:", data)
+    return jsonify({"status": "ok", "received": data}), 200
 
 @app.route('/api/get_graph', methods=['POST'])
 def get_graph():

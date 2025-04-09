@@ -4,18 +4,24 @@ from graph_utils import *
 from utils import *
 import ast
 import inspect
+from enum import Enum
+import re
+import ast
+
+class Bucket(Enum):
+    IRRELEVANT = 1
+    GENERAL = 2
+    GRAPH = 3
+
 
 COURSE_LEVELS = ['Foundations', 'Professional', 'Expert']
 CERT_LEVELS = ['Professional', 'Expert', 'Master']
 
-import re
-import ast
 
 def extract_resources(text):
     """
     Parameters:
         text (str): The body of text containing the substring.
-        
     Returns:
         list: The extracted list of strings, or None if not found.
     """
@@ -63,6 +69,7 @@ class BasicRAG:
         self.model = model
         self.client = OpenAI()
         self.chat_history = [] 
+        self.role = Bucket.IRRELEVANT
 
     def add_to_history(self, role: str, content: str):
         """Appends a new entry to the chat history."""
@@ -193,6 +200,85 @@ class BasicRAG:
             error_str = f"An error occurred while generating a response: {e}"
             print(error_str)
             return error_str
+        
+    def generate_general_response(self, query, documents: str, user_profile):
+        chat_history_text = self.format_chat_history()
+        prompt = f"""
+        <!-- YOU ARE AN INTELLIGENT COURSE AND CERTIFICATE RECOMMENDATION ASSISTANT FOR ADOBE USERS. USE THE USER’S BACKGROUND, PREVIOUS PLAN HISTORY, AND CURRENT QUERY TO EITHER GENERATE RECOMMENDATIONS, EXPLAIN ADOBE COURSES, OR ASK CLARIFYING QUESTIONS. -->
+
+        <h1>Adobe Learning Assistant</h1>
+
+        <h2><strong>Here is all the context you should learn from first</strong></h2>
+
+        <h3>This is the User Profile, please use it to make a tailored response:</h3>
+        <p>{str(user_profile)}</p>
+
+        <h3>This is the chat history, please use it to learn about where the conversation evolved from:</h3>
+        {chat_history_text}
+
+        <h3>Current User Query:</h3>
+        <p>{query}</p>
+
+        <h3>Retrieved Course & Certificate Documents, THIS IS IMPORTANT, this is all the relevant information from Adobe regarding this request. Please put your responses using this information:</h3>
+        <p>{documents}</p>
+
+        <h2><strong>Instructions</strong></h2>
+
+        <p>You are to choose one of the following roles depending on the user query and available context. Respond in HTML. Be thoughtful in your reasoning and helpful in your tone.</p>
+
+        <h3>Role 1: Career Counselor</h3>
+        <p>If the query is vague, off-topic, or too general, ignore the course documents and ask a clarifying question to understand what the user wants to learn or achieve.</p>
+        <ul>
+            <li>Example: “Would you like to explore a specific Adobe product or get a full learning path recommendation?”</li>
+        </ul>
+
+        <h3>Role 2: Course Explainer</h3>
+        <p>If the user asks about specific courses or programs, use <strong>documents + user profile</strong> to summarize and recommend one or more suitable courses.</p>
+        <ul>
+            <li>Consider: background, goals, current skills, job role, course level, and prerequisites.</li>
+            <li>Explain why the recommendation fits.</li>
+        </ul>
+
+        <h3>Role 3: Career Planner</h3>
+        <p>If the user is looking for a full learning trajectory or update to a plan, use the <strong>graph + documents + user profile</strong> to build a logical course sequence.</p>
+        <ul>
+            <li>Start from the user’s current level or completed courses.</li>
+            <li>Ensure the sequence respects prerequisites and role alignment.</li>
+        </ul>
+
+        <h2><strong>Output Requirements (All in HTML):</strong></h2>
+        <ul>
+            <li>Clearly state which role you are acting under at the top.</li>
+            <li>Use <code>&lt;p&gt;</code> for paragraphs.</li>
+            <li>Use <code>&lt;h2&gt;</code>, <code>&lt;h3&gt;</code> for sectioning.</li>
+            <li>Use <code>&lt;ul&gt;&lt;li&gt;</code> for lists.</li>
+            <li>End your output with:
+                <ul>
+                    <li><code>&lt;p hidden&gt;&lt;strong&gt;Resources Listed&lt;/strong&gt;:[...]&lt;/p&gt;</code></li>
+                    <li><code>&lt;p hidden&gt;&lt;strong&gt;Resources Ordered&lt;/strong&gt;:[...]&lt;/p&gt;</code></li>
+                </ul>
+            </li>
+        </ul>
+
+        <h2><strong>Generate Your Response Below:</strong></h2>
+        """
+        try:
+            self.add_to_history("user", query)
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.7
+            )
+            assistant_response = response.choices[0].message.content
+            self.add_to_history("assistant", assistant_response)
+            return assistant_response
+        except Exception as e:
+            error_str = f"An error occurred while generating a response: {e}"
+            print(error_str)
+            return error_str
 
     def generate_graph_args(self, query:str):
         chat_history_text = self.format_chat_history(html=False)
@@ -233,33 +319,120 @@ class BasicRAG:
         except Exception as e:
             return f"An error occurred while generating a response: {e}"
     
-    def run_rag_pipeline(self, query: str, courses, certificates, top_k: int = 5) -> str:
+    def run_rag_pipeline(self, query: str, courses, certificates, user_profile, top_k: int = 5) -> str:
         """Runs the full RAG pipeline: retrieves documents and generates a response."""
-        retrieved_docs = self.retrieve_documents(query, top_k)
-        response = self.generate_response(query, retrieved_docs)
-
-        resource_names = extract_resources(response)
-        resource_relations = extract_resources_relations(response)
-
-        print("query", query)
-        print("response", response)
-        print("resource_names", resource_names)
-        print("resource_relations", resource_relations)
-        max_resources = 5
-
-        if resource_names:
-            job_roles, info_level = self.generate_graph_args(query)
-            if info_level != "high":
-                max_resources = 1
-            
-            graph_args = [job_roles, info_level, resource_names[:max_resources]]
-            graph, context, category = self.retrieve_graph(query, courses, certificates, graph_args)
+        bucket = self.find_bucket(query)
+        if bucket == Bucket.IRRELEVANT:
+            return "I don't understand what you said. Can you please ask something related to Adobe?", None
+        elif bucket == Bucket.GENERAL:
+            retrieved_docs = self.retrieve_documents(query, top_k)
+            response = self.generate_general_response(query, retrieved_docs, user_profile)
+            return response, None
         else:
-            graph = nx.DiGraph()
-            category = None
-        return response, category, graph
+            retrieved_docs = self.retrieve_documents(query, top_k)
+            response = self.generate_response(query, retrieved_docs)
+
+            resource_names = extract_resources(response)
+            resource_relations = extract_resources_relations(response)
+
+            print("query", query)
+            print("response", response)
+            print("resource_names", resource_names)
+            print("resource_relations", resource_relations)
+            max_resources = 5
+
+            if resource_names:
+                job_roles, info_level = self.generate_graph_args(query)
+                if info_level != "high":
+                    max_resources = 1
+                
+                graph_args = [job_roles, info_level, resource_names[:max_resources]]
+                graph, context, category = self.retrieve_graph(query, courses, certificates, graph_args)
+            else:
+                graph = nx.DiGraph()
+                category = None
+            return response, graph
 
     def run_graph_rag_pipeline(self, query, courses, certificates):
         category = self.get_category(query)
         response = self.generate_response_based_on_category(query, category, courses, certificates)
         return response
+
+    def grouper(self, query):
+        # Construct the prompt
+        # Structured prompt with HTML output
+
+        chat_history_text = self.format_chat_history()
+
+        prompt = f"""
+        YOU ARE AN ADOBE COURSE/CERTIFICATE RECOMMENDATION BOT. YOUR JOB IS TO IDENTIFY WHICH CATEGORY A USER'S CURRENT REQUEST FALLS UNDER.
+
+        A USER QUERY IS CATEGORIZED INTO ONE OF THE FOLLOWING TYPES:
+
+        1. **Irrelevant Request**  
+        The query is not related to Adobe courses or certificates, or is general conversation with no actionable request.
+
+        **Examples:**
+        - "What's the weather like today?"
+        - "Tell me a joke."
+        - "Can you help me fix my printer?"
+
+        2. **General Request**  
+        The query is exploratory, asking for information about Adobe programs, courses, or certificates without requesting a specific learning path.
+
+        **Examples:**
+        - "What types of courses does Adobe offer?"
+        - "Can you tell me more about the Adobe Analytics Professional course?"
+        - "Are there any certificates for digital marketing?"
+
+        3. **Modifying or Creating a Course Graph/Trajectory**  
+        The user wants to receive a recommended course/certificate path or make changes to a previously suggested learning trajectory.
+
+        **Examples:**
+        - "What’s the best path to reach Adobe Analytics Expert?"
+        - "I already completed Adobe Commerce Foundations, what should I take next?"
+        - "Can you help me update my learning plan for a Master certificate in Adobe Analytics?"
+
+        We will provide the previous conversation history and user query below.
+
+        **Previous Conversation:**  
+        "{chat_history_text}"
+
+        **User Query:**  
+        "{query}"
+
+        Respond with ONLY a number: `1`, `2`, or `3` — indicating the category of the request.  
+        No additional words, explanations, or symbols.
+        """
+        try:
+            self.add_to_history("user", query)
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.1,
+                seed=42
+            )
+            assistant_response = response.choices[0].message.content
+            self.add_to_history("assistant", assistant_response)
+            return assistant_response
+        except Exception as e:
+            error_str = f"An error occurred while generating a response: {e}"
+            print(error_str)
+            return error_str
+    
+    def find_bucket(self, query: str):
+        response = self.first_pass(query).strip()
+
+        if "1" in response:
+            self.role = Bucket.IRRELEVANT
+        elif "2" in response:
+            self.role = Bucket.GENERAL
+        elif "3" in response:
+            self.role = Bucket.GRAPH
+        else:
+            print("Warning: Unable to classify query response properly.")
+            self.role = Bucket.IRRELEVANT  # fallback
+        return self.role    
