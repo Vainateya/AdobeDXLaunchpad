@@ -7,6 +7,13 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'dependency_graph')))
 from utils import *
 
+class TextDocument:
+    def __init__(self, filepath: str):
+        self.filepath = filepath
+        self.display = os.path.basename(filepath).replace(".txt", "")
+        with open(filepath, "r", encoding="utf-8") as f:
+            self.content = f.read()
+
 class DocumentStore:
     def __init__(self, embedding_model: str = "text-embedding-ada-002", similarity_metric: str = "cosine", storage_path: str = ".chroma_db"):
         self.storage_path = storage_path  # Path where ChromaDB will store data

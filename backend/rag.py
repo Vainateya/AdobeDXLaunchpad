@@ -249,22 +249,21 @@ class BasicRAG:
 
         <h2><strong>Instructions</strong></h2>
 
-        <p>You are to choose one of the following roles depending on the user query and available context. Respond in HTML. Be thoughtful in your reasoning and helpful in your tone.</p>
+        <p>You are to act in the following ways depending on the user query and available context. Respond in HTML. Be thoughtful in your reasoning and helpful in your tone.</p>
 
-        <h3>Role 1: Career Counselor</h3>
-        <p>If the query is vague, off-topic, or too general, ignore the course documents and ask a clarifying question to understand what the user wants to learn or achieve.</p>
+        <p>If the query is programmatic in nature or has to do with general logistical or enrollment information/faqs, please answer to the best of the supporting documents above.</p>
+
+        <p>If the query is vague or too general, ignore the documents and ask a clarifying question to understand what the user wants to learn or achieve.</p>
         <ul>
             <li>Example: “Would you like to explore a specific Adobe product or get a full learning path recommendation?”</li>
         </ul>
 
-        <h3>Role 2: Course Explainer</h3>
         <p>If the user asks about specific courses or programs, use <strong>documents + user profile</strong> to summarize and recommend one or more suitable courses.</p>
         <ul>
             <li>Consider: background, goals, current skills, job role, course level, and prerequisites.</li>
             <li>Explain why the recommendation fits.</li>
         </ul>
 
-        <h3>Role 3: Career Planner</h3>
         <p>If the user is looking for a full learning trajectory or update to a plan, use the <strong>graph + documents + user profile</strong> to build a logical course sequence.</p>
         <ul>
             <li>Start from the user’s current level or completed courses.</li>
@@ -368,8 +367,8 @@ class BasicRAG:
             #TODO: Allow for manipulation of study guides
 
             rag_query = 'Current resources in graph: ' + ', '.join("'" + name + "'" for name in self.current_graph) + " User Query: " + query
-            retrieved_docs = self.retrieve_documents(rag_query, top_k=10)[1]
-            retrieved_docs.extend(self.retrieve_documents(query, top_k=5, omit_titles=[d['metadata']['title'] for d in retrieved_docs])[1])
+            retrieved_docs = self.retrieve_documents(rag_query, top_k=10, exclude_supplement=True)[1]
+            retrieved_docs.extend(self.retrieve_documents(query, top_k=5, exclude_supplement=True, omit_titles=[d['metadata']['title'] for d in retrieved_docs])[1])
             # print(query)
             # print(rag_query)
             # print("Retrieved docs:", [d['metadata']['title'] for d in retrieved_docs], "Current docs:", self.current_graph)
@@ -426,7 +425,7 @@ class BasicRAG:
         A USER QUERY IS CATEGORIZED INTO ONE OF THE FOLLOWING TYPES:
 
         1. Irrelevant Request  
-        The query is not related to Adobe courses or certificates, or is general conversation with no actionable request.
+        The query is completely, entirely unrelated to courses or certificates, especially the ones offered at Adobe.
 
         Examples:
         - "What's the weather like today?"
@@ -434,12 +433,17 @@ class BasicRAG:
         - "Can you help me fix my printer?"
 
         2. General Request  
-        The query is exploratory, asking for information about Adobe programs, courses, or certificates without requesting a specific learning path. ONLY default to this when the user wants nothing to do with the current graph, in which case default to the third option
+        The query is exploratory, asking for information about Adobe programs, courses, or certificates without requesting a specific learning path. 
+        It could also ask general logistical and programmatic questions about Adobe courses and certifications. 
 
         Examples:
         - "What types of courses does Adobe offer?"
         - "Can you tell me more about the Adobe Analytics Professional course?"
         - "Are there any certificates for digital marketing?"
+        - "How do I sign up for a certification?"
+        - "Are exams available in languages other than English?"
+
+        If user wants anything AT ALL to do with the current graph, please default to the third option below:
 
         3. Modifying or Creating a Course Graph/Trajectory
         The user wants to receive a recommended course/certificate path or make changes to a previously suggested learning trajectory.

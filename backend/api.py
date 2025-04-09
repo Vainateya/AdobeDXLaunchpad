@@ -18,13 +18,6 @@ from rag import *
 #     encode_kwargs={"normalize_embeddings": True},
 # )
 
-class TextDocument:
-    def __init__(self, filepath: str):
-        self.filepath = filepath
-        self.display = os.path.basename(filepath).replace(".txt", "")
-        with open(filepath, "r", encoding="utf-8") as f:
-            self.content = f.read()
-
 # Create separate DocumentStore for program info documents
 program_store = DocumentStore(similarity_metric="cosine", storage_path="./supplement_docs")
 
