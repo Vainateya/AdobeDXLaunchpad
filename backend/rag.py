@@ -215,6 +215,28 @@ class BasicRAG:
             error_str = f"An error occurred while generating a response: {e}"
             print(error_str)
             return error_str
+        
+    def generate_general_response(self, query, documents: str):
+        chat_history_text = self.format_chat_history()
+        prompt = f"""
+        """
+        try:
+            self.add_to_history("user", query)
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.7
+            )
+            assistant_response = response.choices[0].message.content
+            self.add_to_history("assistant", assistant_response)
+            return assistant_response
+        except Exception as e:
+            error_str = f"An error occurred while generating a response: {e}"
+            print(error_str)
+            return error_str
 
     def generate_graph_args(self, query:str):
         chat_history_text = self.format_chat_history(html=False)
@@ -257,36 +279,44 @@ class BasicRAG:
     
     def run_rag_pipeline(self, query: str, courses, certificates, top_k: int = 5) -> str:
         """Runs the full RAG pipeline: retrieves documents and generates a response."""
-        retrieved_docs = self.retrieve_documents(query, top_k)
-        response = self.generate_response(query, retrieved_docs)
-
-        resource_names = extract_resources(response)
-        resource_relations = extract_resources_relations(response)
-
-        print("query", query)
-        print("response", response)
-        print("resource_names", resource_names)
-        print("resource_relations", resource_relations)
-        max_resources = 5
-
-        if resource_names:
-            job_roles, info_level = self.generate_graph_args(query)
-            if info_level != "high":
-                max_resources = 1
-            
-            graph_args = [job_roles, info_level, resource_names[:max_resources]]
-            graph, context, category = self.retrieve_graph(query, courses, certificates, graph_args)
+        bucket = self.find_bucket(query)
+        if bucket == Bucket.IRRELEVANT:
+            return "I don't understand what you said. Can you please ask something related to Adobe?", None
+        elif bucket == Bucket.GENERAL:
+            retrieved_docs = self.retrieve_documents(query, top_k)
+            response = self.generate_general_response(query, retrieved_docs)
+            return response, None
         else:
-            graph = nx.DiGraph()
-            category = None
-        return response, category, graph
+            retrieved_docs = self.retrieve_documents(query, top_k)
+            response = self.generate_response(query, retrieved_docs)
+
+            resource_names = extract_resources(response)
+            resource_relations = extract_resources_relations(response)
+
+            print("query", query)
+            print("response", response)
+            print("resource_names", resource_names)
+            print("resource_relations", resource_relations)
+            max_resources = 5
+
+            if resource_names:
+                job_roles, info_level = self.generate_graph_args(query)
+                if info_level != "high":
+                    max_resources = 1
+                
+                graph_args = [job_roles, info_level, resource_names[:max_resources]]
+                graph, context, category = self.retrieve_graph(query, courses, certificates, graph_args)
+            else:
+                graph = nx.DiGraph()
+                category = None
+            return response, graph
 
     def run_graph_rag_pipeline(self, query, courses, certificates):
         category = self.get_category(query)
         response = self.generate_response_based_on_category(query, category, courses, certificates)
         return response
 
-    def first_pass(self, query):
+    def grouper(self, query):
         # Construct the prompt
         # Structured prompt with HTML output
 
@@ -363,5 +393,4 @@ class BasicRAG:
         else:
             print("Warning: Unable to classify query response properly.")
             self.role = Bucket.IRRELEVANT  # fallback
-
-    
+        return self.role    
