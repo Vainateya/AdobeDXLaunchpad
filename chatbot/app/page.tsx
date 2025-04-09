@@ -75,6 +75,9 @@ export default function Home() {
   const [isCertified, setIsCertified] = useState(null); // yes or no
   const [experienceYears, setExperienceYears] = useState("");
   const [glowActive, setGlowActive] = useState(true);
+  const [certificationText, setCertificationText] = useState("");
+  const [areaOfExpertise, setAreaOfExpertise] = useState("");
+
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -210,7 +213,7 @@ export default function Home() {
             {/* Question 1 */}
             <div className="mb-4">
               <label className="block text-sm font-medium mb-2">
-                1. Are you already certified?
+                1. Do you already have an Adobe certification or have you already done an Adobe course?
               </label>
               <div className="flex gap-4">
                 <button
@@ -230,6 +233,36 @@ export default function Home() {
                   No
                 </button>
               </div>
+            
+			  {/* Follow-up question */}
+			{isCertified === "yes" && (
+				<div className="mt-4">
+				<label className="block text-sm font-medium mb-2">
+					What Adobe course or certification(s) did you do?
+				</label>
+				<input
+					type="text"
+					className="w-full px-4 py-2 border border-gray-300 rounded bg-white text-black"
+					value={certificationText}
+					onChange={(e) => setCertificationText(e.target.value)}
+					placeholder="e.g., Adobe Analytics 1043, Campaign 1060"
+				/>
+				</div>
+			)}
+			</div>
+
+			{/* Question 2 */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-2">
+                2. Area of expertise:
+              </label>
+              <input
+                type="text"
+				className="w-full px-4 py-2 border border-gray-300 rounded bg-white text-black"
+				value={areaOfExpertise}
+				onChange={(e) => setAreaOfExpertise(e.target.value)}
+				placeholder="e.g., Adobe Analytics 1043, Campaign 1060"
+              />
             </div>
 
             {/* Question 2 */}
@@ -253,6 +286,8 @@ export default function Home() {
               onClick={() => {
                 const surveyData = {
                   certified: isCertified,
+				  certifications: certificationText,
+				  expertise: areaOfExpertise,
                   experience_years: experienceYears,
                 };
 
