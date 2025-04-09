@@ -368,7 +368,7 @@ export default function Home() {
           >
             {/* Title */}
             <p className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-300">
-              {hoveredNode.data.type === "course" ? "Course" : "Certification"}
+              {hoveredNode.data.type}
             </p>
 
             {/* Shared Fields */}
