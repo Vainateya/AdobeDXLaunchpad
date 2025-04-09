@@ -225,7 +225,7 @@ class BasicRAG:
         <h2><strong>Here is all the context you should learn from first</strong></h2>
 
         <h3>This is the User Profile, please use it to make a tailored response:</h3>
-        <p>{user_profile}</p>
+        <p>{str(user_profile)}</p>
 
         <h3>This is the chat history, please use it to learn about where the conversation evolved from:</h3>
         {chat_history_text}
