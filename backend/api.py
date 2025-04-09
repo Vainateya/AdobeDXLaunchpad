@@ -39,6 +39,8 @@ save_folder = "pickels"
 certificates_save_location = os.path.join(save_folder, "certificates.pkl")
 courses_save_location = os.path.join(save_folder, "courses.pkl")
 
+user_data = {}
+
 if not os.path.exists(courses_save_location) or not os.path.exists(certificates_save_location):
     print("Scraping resources...")
     if not os.path.exists(save_folder):
@@ -74,6 +76,11 @@ if store.collection.count() == 0:
     print(f"Total documents after reloading: {store.collection.count()}")
 
 rag = BasicRAG(document_store=store)
+
+@app.route('/api/survey', methods=['POST'])
+def survey():
+    data = request.get_json()
+    user_data = data
 
 @app.route('/api/get_graph', methods=['POST'])
 def get_graph():
