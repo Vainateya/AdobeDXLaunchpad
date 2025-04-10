@@ -52,10 +52,6 @@ class BasicRAG:
         self.temperature = 0
 
     def format_docs_context(self, docs):
-        if docs:
-            for doc in docs:
-                print(doc['metadata'].keys())
-        
         return "\n\n".join(
             [
                 f"<h3>{doc['metadata']['title']}</h3> <p><strong>THIS IS A {doc['metadata']['type'].upper()}</strong></p>" +
@@ -82,8 +78,11 @@ class BasicRAG:
             supplement_docs = self.supplement_store.query_documents(query_text=query, top_k=top_k)
             filtered_docs += supplement_docs  # same as all_docs = all_docs + supplement_docs
 
-        print("Inner context")
         context = self.format_docs_context(filtered_docs)
+
+        print("Similarity scores for query:", query)
+        for doc in filtered_docs:
+            print(doc['metadata']['title'], doc['score'])
 
         return context, filtered_docs
 
@@ -126,9 +125,10 @@ class BasicRAG:
             out +=  f"At time {i}: User asked '{query}'. Resources in the resource graph at that time were {str(graph)}\n'"
         return out
 
-    def generate_new_graph(self, query, cur_resources={}, history=[], resource_info=""):
+    def generate_new_graph(self, query, cur_resources={}, history=[], resource_info="", user_profile=""):
         # Construct the prompt
         # Structured prompt with HTML output
+        chat_history_text = self.format_chat_history()
 
         prompt = f'''You are a strict, rules-based trajectory planner that simulates valid learning pathways. Your task is to return a JSON object with one of the following operations: ADD, SUBTRACT, OVERHAUL, GO_BACK, or NO_CHANGE. You must only work with the resources explicitly listed in the 'Resources you should know about' section. Follow all rules below exactly. Violating any rule will make the response invalid.
         
@@ -149,6 +149,18 @@ class BasicRAG:
         - R6 (No Level Skipping): You must not skip levels. For example, you cannot go from a Foundations course directly to an Expert course.
 
         -----------------------------------
+        USER PROFILE
+        -----------------------------------
+        This is the user's current profile. You may use this to tailor recommendations for them.
+        {user_profile}
+        
+        -----------------------------------
+        CONVERSATION HISTORY
+        -----------------------------------
+        This is the user's previous conversations with an LLM Agent. Use this only to identify the user's intent and resources they may have indicated wanting to take.
+        {chat_history_text}
+
+        -----------------------------------
         RESOURCE DEFINITIONS
         -----------------------------------
 
@@ -158,8 +170,8 @@ class BasicRAG:
         OPERATIONS DEFINITION
         -----------------------------------
 
-        - ADD: Only add new resources to the current graph from those listed in 'Resources you should know about'. Do not remove existing resources unless performing SUBTRACT simultaneously.
-        - SUBTRACT: Only remove resources from the current graph. Do not add new resources unless paired with ADD.
+        - ADD: Only add new resources to the current graph from those listed in 'Resources you should know about'. Do not remove existing resources - You may perform a ADD operation alongside a SUBTRACT.
+        - SUBTRACT: Only remove resources from the current graph. Do not add new resources unless - You may perform an ADD operation alongside a SUBTRACT.
         - OVERHAUL: Completely discard the current graph and replace it with a brand new valid trajectory. This operation cannot be combined with any other.
         - GO_BACK: Restore the resource graph to a previous state, specified by index from 'Resource History'. Do not include any resource names.
         - NO_CHANGE: Return the current graph unchanged. Use this when the user does not request modifications.
@@ -304,7 +316,7 @@ class BasicRAG:
 
         """
         try:
-            print("General Reponse Prompt:", prompt)
+            # print("General Reponse Prompt:", prompt)
             stream = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -343,7 +355,8 @@ class BasicRAG:
         current_docs = [self.title2doc[g] for g in self.current_graph if g in self.current_graph and 'Study Materials' not in g] + retrieved_docs
         resource_info = self.format_docs_context(current_docs)
 
-        raw_graph_ops = self.generate_new_graph(query, self.current_graph, self.past_graphs, resource_info)
+        raw_graph_ops = self.generate_new_graph(query, self.current_graph, self.past_graphs, resource_info, user_profile=user_profile)
+        print(raw_graph_ops)
         graph_ops = extract_dict_from_string(raw_graph_ops)
 
         if 'ADD' in graph_ops:
@@ -486,7 +499,7 @@ class BasicRAG:
         #     self.role = Bucket.GRAPH
 
         if "1" in response:
-            self.role = Bucket.IRRELEVANT
+            self.role = Bucket.GENERAL
         elif "2" in response:
             self.role = Bucket.GENERAL
         elif "3" in response:

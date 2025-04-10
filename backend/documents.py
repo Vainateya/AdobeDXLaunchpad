@@ -92,15 +92,17 @@ class DocumentStore:
     def query_documents(self, query_text: str, top_k: int = 1) -> List[Dict]:
         """Retrieves the top K most relevant documents based on similarity search."""
         query_embedding = self.generate_embedding(query_text)
-        results = self.collection.query(query_embeddings=[query_embedding], n_results=top_k, include=['documents', 'metadatas'])
+        results = self.collection.query(query_embeddings=[query_embedding], n_results=top_k, include=['documents', 'metadatas', 'distances'])
         
         retrieved_documents = []
         for i in range(len(results["ids"][0])):
             retrieved_documents.append({
                 "id": results["ids"][0][i],
                 "metadata": results["metadatas"][0][i],
-                "text": results["documents"][0][i]
+                "text": results["documents"][0][i],
+                "score": results["distances"][0][i],
             })
+
         return retrieved_documents
 
     def get_category_from_best_document(self, query_text):

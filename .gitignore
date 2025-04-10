@@ -4,7 +4,8 @@ dependency_graph/.env
 .venv/*
 key.txt
 
-backend/pickels/*
-backend/supplement_docs/*
-backend/chroma_storage/*
+*/pickels/*
+*/supplement_docs/*
+*/chroma_storage/*
 backend/.env
+backend/supplement_docs/chroma.sqlite3
