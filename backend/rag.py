@@ -425,10 +425,13 @@ class BasicRAG:
         - "Can you help me fix my printer?"
 
         2. General Request  
-        In this case the query is a general question, asking for information about Adobe programs, courses, or certificates without requesting a specific learning path. 
+        In this case the query is a general question, giving a greeting, asking for information about Adobe programs, asking for information about you, what you do, courses, or certificates without requesting a specific learning path. 
         It could also ask general logistical and programmatic questions about Adobe courses and certifications. This will mostly rely on the user query. 
 
         Examples:
+        - "Hello"
+        - "What do you do?"
+        - "Wha is this about?"
         - "What types of courses does Adobe offer?"
         - "Can you tell me more about the Adobe Analytics Professional course?"
         - "Are there any certificates for digital marketing?"
