@@ -49,8 +49,11 @@ class BasicRAG:
         self.current_graph = [] # {}
         self.current_nx_graph = nx.DiGraph()
         self.title2doc = {d['metadata']['title']: d for d in self.document_store.get_all_documents()}
+        self.temperature = 0
 
     def format_docs_context(self, docs):
+        if docs:
+            print(docs[0].keys())
         return "\n\n".join(
             [
                 f"<h3>{doc['metadata']['title']}</h3> <p>THIS IS A {doc['metadata']['type'].upper()}</p>" +
@@ -69,12 +72,11 @@ class BasicRAG:
         If exclude_supplement=True, excludes supplemental docs (only uses course/cert content)."""
 
         all_docs = self.document_store.query_documents(query_text=query, top_k=top_k)
+        filtered_docs = [doc for doc in all_docs if doc['metadata']['title'] not in omit_titles]
 
         if not exclude_supplement:
             supplement_docs = self.supplement_store.query_documents(query_text=query, top_k=top_k)
-            all_docs += supplement_docs  # same as all_docs = all_docs + supplement_docs
-
-        filtered_docs = [doc for doc in all_docs if doc['metadata']['title'] not in omit_titles]
+            filtered_docs += supplement_docs  # same as all_docs = all_docs + supplement_docs
 
         context = self.format_docs_context(filtered_docs)
 
@@ -91,9 +93,9 @@ class BasicRAG:
         """Formats the chat history for including in the prompt."""
         def format_text(role, s, html=True):
             if html:
-                return f"<p><strong>{role}</strong>{s}</p>\n"
+                return f"<p><strong>{role} previously said: </strong>{s}</p>\n"
             else:
-                return f"{role}:{s}\n"
+                return f"{role} previously said::{s}\n"
 
         chat_history_text = ""
         for entry in self.chat_history:
@@ -108,9 +110,9 @@ class BasicRAG:
         chat_history_text = ""
         for entry in self.chat_history:
             if entry["role"] == "user":
-                chat_history_text += f"User: {entry['content']}\n"
+                chat_history_text += f"User previously said: {entry['content']}\n"
             elif entry["role"] == "assistant":
-                chat_history_text += f"Assistant: {entry['content']}\n"
+                chat_history_text += f"Assistant previously said: {entry['content']}\n"
         return chat_history_text
 
     def format_past_graphs(self, graphs: list[str]):
@@ -142,6 +144,12 @@ class BasicRAG:
         - R6 (No Level Skipping): You must not skip levels. For example, you cannot go from a Foundations course directly to an Expert course.
 
         -----------------------------------
+        RESOURCE DEFINITIONS
+        -----------------------------------
+
+        {resource_info}
+        
+        -----------------------------------
         OPERATIONS DEFINITION
         -----------------------------------
 
@@ -150,13 +158,6 @@ class BasicRAG:
         - OVERHAUL: Completely discard the current graph and replace it with a brand new valid trajectory. This operation cannot be combined with any other.
         - GO_BACK: Restore the resource graph to a previous state, specified by index from 'Resource History'. Do not include any resource names.
         - NO_CHANGE: Return the current graph unchanged. Use this when the user does not request modifications.
-
-        -----------------------------------
-        RESOURCE DEFINITIONS
-        -----------------------------------
-
-        {resource_info}
-
         
         -----------------------------------
         OUTPUT FORMAT
@@ -176,11 +177,7 @@ class BasicRAG:
         
         Option 3: GO_BACK, no other operations
         Response: {{
-        "ADD": ["RESOURCE_1", "RESOURCE_2"],
-        "SUBTRACT": ["RESOURCE_3"],
-        "OVERHAUL": ["RESOURCE_4", "RESOURCE_5"],
-        "GO_BACK": 0,
-        "NO_CHANGE": []
+            "GO_BACK": TIME_STEP,
         }}
 
         Option 4: NO_CHANGE, no other operations
@@ -214,14 +211,14 @@ class BasicRAG:
 
 
         try:
-            print("Prompt:", prompt)
+            print("Graph Generation Prompt:", prompt)
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": "You are a helpful assistant."},
                     {"role": "user", "content": prompt},
                 ],
-                temperature=0.7
+                temperature=self.temperature
             )
             assistant_response = response.choices[0].message.content
             return assistant_response
@@ -241,165 +238,158 @@ class BasicRAG:
         if graph_str_raw:
             graph_str = f'''
             <h3>Resource Graph: This is the user's current learning pathway, including courses, study guides, and certifications. Use this if the user's query relates to modify the graph or questions about the courses on the graph</h3>
-            <p>{graph_str}</p>
+            <p>{graph_str_raw}</p>
             '''
 
         prompt = f"""
-        <!-- YOU ARE AN INTELLIGENT COURSE AND CERTIFICATE RECOMMENDATION ASSISTANT FOR ADOBE USERS. USE THE USER’S BACKGROUND, PREVIOUS PLAN HISTORY, AND CURRENT QUERY TO EITHER GENERATE RECOMMENDATIONS, EXPLAIN ADOBE COURSES, OR ASK CLARIFYING QUESTIONS. -->
-
         <h1>Adobe Learning Assistant</h1>
 
-        <h2><strong>Here is all the context you need</strong></h2>
+        <h2><strong>Your Role</strong></h2>
+        <p>You are an intelligent assistant for Adobe users seeking learning guidance. Based on the user’s query, resource graph, user profile, and document context, respond in a way that is helpful, well-reasoned, and matches the user’s level and goals.</p>
 
-        <h3>This is the User Profile, please use it to make a tailored response:</h3>
-        <p>{str(user_profile)}</p>
+        <h2><strong>How to Use Context</strong></h2>
+        <ol>
+        <li><strong>Use the Resource Graph if it is present</strong> — This is the user’s current learning plan. Prefer it over external course documents for accuracy and continuity.</li>
+        <li>Use the <strong>Retrieved Documents</strong> only when no relevant learning pathway is defined in the graph.</li>
+        <li>Use the <strong>Chat History</strong> to understand the user’s evolving goals and prior interests.</li>
+        <li>Use the <strong>User Profile</strong> (if available) to tailor tone, role alignment, and course level recommendations.</li>
+        </ol>
 
-        <h3>This is the chat history, please use it to learn about where the conversation evolved from:</h3>
-        {chat_history_text}
+        <h2><strong>Context</strong></h2>
+
+        <h3>User Profile:</h3>
+        <p>{user_profile}</p>
+
+        <h3>Chat History:</h3>
+        <p>{chat_history_text}</p>
 
         <h3>Current User Query:</h3>
         <p>{query}</p>
 
-        <h3>Bucket categorization: if this is General, then utilize primarily the current user query. Otherwise, utilize the query and chat_history equally.</h3>
-        <p>{bucket}</p>
+        <h3>Resource Graph:</h3>
+        <p>{graph_str}</p>
 
-        <h3>Retrieved Course & Certificate Documents, THIS IS IMPORTANT, this is all the relevant information from Adobe regarding this request. Please put your responses using this information:</h3>
-        <p>{documents}</p>
-
-        {graph_str}
-
-        <h3>ENSURE THAT YOU ONY PULL INFORMATION FROM THE LEARNING PATHWAY AND DISREGARD DOCUMENTS IF LEARNING PATH IS PRESENT (ITS MORE TAILORED)</h3>
+        <h3>Retrieved Course & Certificate Documents:</h3>
+        <p>{self.format_docs_context(documents)}</p>
 
         <h2><strong>Instructions</strong></h2>
 
-        <p>You are to act in the following ways depending on the user query and available context. Respond in HTML. Be thoughtful in your reasoning and helpful in your tone.</p>
-
-        <p>If the query is programmatic in nature or has to do with general logistical or enrollment information/faqs, please answer to the best of the supporting documents above.</p>
-
-        <p>If the query is vague or too general, ignore the documents and ask a clarifying question to understand what the user wants to learn or achieve.</p>
+        <p>Use the following decision logic to respond:</p>
         <ul>
-            <li>Example: “Would you like to explore a specific Adobe product or get a full learning path recommendation?”</li>
+        <li><strong>If the query is vague</strong>: Ask a clear, helpful clarifying question to guide the user toward a learning goal.</li>
+        <li><strong>If the query asks for a course or certification recommendation</strong>: Use the Resource Graph if available. Otherwise use the retrieved documents. Always explain your reasoning, referencing level, role, or objectives.</li>
+        <li><strong>If the query asks about specific programs</strong>: Summarize those programs from the most reliable source (Graph → Docs), and explain fit based on user role, level, or prior steps.</li>
+        <li><strong>If the query is programmatic or logistical</strong>: Answer directly from document context.</li>
         </ul>
 
-        <p>If the user asks about specific courses or programs, use <strong>documents + user profile</strong> to summarize and recommend one or more suitable courses.</p>
+        <h2><strong>Rules You Must Follow</strong></h2>
         <ul>
-            <li>Consider: background, goals, current skills, job role, course level, and prerequisites.</li>
-            <li>Explain why the recommendation fits.</li>
+        <li><strong>Only recommend resources listed in the graph if it is present.</strong></li>
+        <li><strong>Never hallucinate course or certificate names.</strong> Only use names exactly as provided.</li>
+        <li><strong>Clearly distinguish between courses and certificates.</strong></li>
         </ul>
 
-        <p>If the user is looking for a full learning trajectory or update to a plan, use the <strong>graph + documents + user profile</strong> to build a logical course sequence.</p>
+        <h2><strong>Response Format</strong></h2>
         <ul>
-            <li>Start from the user’s current level or completed courses.</li>
-            <li>Ensure the sequence respects prerequisites and role alignment.</li>
+        <li>Use <code>&lt;p&gt;</code> for explanations.</li>
+        <li>Use <code>&lt;h2&gt;</code> and <code>&lt;h3&gt;</code> for structure.</li>
+        <li>Use bullet lists for course breakdowns.</li>
         </ul>
 
-        <h2><strong>Output Requirements (All in HTML):</strong></h2>
-        <ul>
-            <li>Clearly state which role you are acting under at the top.</li>
-            <li>Use <code>&lt;p&gt;</code> for paragraphs.</li>
-            <li>Use <code>&lt;h2&gt;</code>, <code>&lt;h3&gt;</code> for sectioning.</li>
-            <li>Use <code>&lt;ul&gt;&lt;li&gt;</code> for lists.</li>
-        </ul>
+        <h2><strong>Now generate your response below:</strong></h2>
 
-        <h2><strong>ENSURE THAT ANY COURSES YOU RECCOMEND ONLY COME FROM THE GRAPH IF ITS PROVIDED!</strong></h2>
-
-        <h2><strong>ENSURE THAT YOU DONT MISLABEL COURSES AND CERTIFICATES!</strong></h2>
-
-        <h2><strong>Generate Your Response Below:</strong></h2>
         """
         try:
-            response = self.client.chat.completions.create(
+            print("General Reponse Prompt:", prompt)
+            stream = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": "You are a helpful assistant."},
                     {"role": "user", "content": prompt},
                 ],
-                temperature=0.7
+                stream=True,
+                temperature=self.temperature
             )
-            assistant_response = response.choices[0].message.content
-            lines = assistant_response.splitlines()
-            assistant_response = "\n".join(lines[1:-1])
-            print(assistant_response)
-            return assistant_response
+
+            for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    token = chunk.choices[0].delta.content
+                    yield token
+
+            # assistant_response = response.choices[0].message.content
+            # lines = assistant_response.splitlines()
+            # assistant_response = "\n".join(lines[1:-1])
+            # return assistant_response
         except Exception as e:
             error_str = f"An error occurred while generating a response: {e}"
             print(error_str)
             return error_str
 
-    def run_rag_pipeline(self, query: str, courses, certificates, user_profile, top_k: int = 5) -> str:
-        """Runs the full RAG pipeline: retrieves documents and generates a response."""
+    def update_graph_state(self, query, courses, certificates, user_profile):
         bucket = self.find_bucket(query)
         if bucket == Bucket.IRRELEVANT:
-            default_str = "I don't understand what you said. Can you please ask something related to Adobe?"
-            self.add_to_history("user", query)
-            self.add_to_history("assistant", default_str)
-            return default_str, nx.DiGraph()
-        elif bucket == Bucket.GENERAL:
-            print("BUCKET", bucket)
-            if len(self.current_graph) > 0:
-                _, e = graph_to_2d_array(self.current_nx_graph)
-                graph_str = display_edges(e)
-            else:
-                graph_str = ""
-        
-            retrieved_docs = self.retrieve_documents(query, top_k)
-            response = self.generate_general_response(query, retrieved_docs, user_profile, 'General', graph_str)
-            self.add_to_history("user", query)
-            self.add_to_history("assistant", response)
-            return response, self.current_nx_graph
+            return self.current_nx_graph
+    
+        rag_query = 'Current resources in graph: ' + ', '.join("'" + name + "'" for name in self.current_graph) + " User Query: " + query
+
+        retrieved_docs = self.retrieve_documents(rag_query, top_k=10, exclude_supplement=True)[1]
+        retrieved_docs.extend(
+            self.retrieve_documents(query, top_k=5, exclude_supplement=True, omit_titles=[d['metadata']['title'] for d in retrieved_docs])[1]
+        )
+        current_docs = [self.title2doc[g] for g in self.current_graph if g in self.current_graph and 'Study Materials' not in g] + retrieved_docs
+        resource_info = self.format_docs_context(current_docs)
+
+        raw_graph_ops = self.generate_new_graph(query, self.current_graph, self.past_graphs, resource_info)
+        graph_ops = extract_dict_from_string(raw_graph_ops)
+
+        if 'ADD' in graph_ops:
+            self.current_graph.extend([g for g in graph_ops['ADD'] if g in self.title2doc])
+        if 'SUBTRACT' in graph_ops:
+            self.current_graph = [source for source in self.current_graph if source not in graph_ops['SUBTRACT']]
+        if 'OVERHAUL' in graph_ops:
+            self.current_graph = [g for g in graph_ops['OVERHAUL'] if g in self.title2doc]
+        if 'GO_BACK' in graph_ops:
+            self.current_graph = self.past_graphs[int(graph_ops['GO_BACK'])][1]
+
+        self.current_nx_graph = self.retrieve_graph(courses, certificates, self.current_graph)
+        self.past_graphs.append((query, self.current_graph))
+        return self.current_nx_graph
+
+    def run_rag_pipeline_stream(self, query: str, courses, certificates, user_profile, top_k: int = 5):
+        """
+        Runs the RAG pipeline and yields assistant response tokens as a stream.
+        This version is designed for use in Flask streaming endpoints.
+        """
+        bucket = self.find_bucket(query)
+        print("BUCKET:", bucket)
+
+        if bucket == Bucket.IRRELEVANT:
+            yield "I’m not sure how to help with that one — but if you’re looking to grow your skills with Adobe, I’d be happy to guide you! Want to explore a specific product or learning path?"
+            return
+
+        # Add user message to chat history
+        self.add_to_history("user", query)
+
+        # Use existing graph if applicable
+        if len(self.current_graph) > 0:
+            _, e = graph_to_2d_array(self.current_nx_graph)
+            graph_str = display_edges(e)
         else:
-            #TODO: Integrate Chat History with graph history
-            #TODO: Allow for manipulation of study guides
+            graph_str = ""
 
-            rag_query = 'Current resources in graph: ' + ', '.join("'" + name + "'" for name in self.current_graph) + " User Query: " + query
-            retrieved_docs = self.retrieve_documents(rag_query, top_k=10, exclude_supplement=True)[1]
-            retrieved_docs.extend(self.retrieve_documents(query, top_k=5, exclude_supplement=True, omit_titles=[d['metadata']['title'] for d in retrieved_docs])[1])
-            # print(query)
-            # print(rag_query)
-            # print("Retrieved docs:", [d['metadata']['title'] for d in retrieved_docs], "Current docs:", self.current_graph)
-            # print("graph_list:", self.current_graph)
+        # Retrieve relevant docs
+        retrieved_docs = self.retrieve_documents(query, top_k)[1]
 
-            # TODO: Handle Study materials
-            current_docs = [self.title2doc[g] for g in self.current_graph if g in self.current_graph and 'Study Materials' not in g] + retrieved_docs
-            resource_info = self.format_docs_context(current_docs)
+        # Start the generator for streamed assistant response
+        stream = self.generate_general_response(query, retrieved_docs, user_profile, 'Graph' if bucket == Bucket.GRAPH else 'General', graph_str_raw=graph_str)
 
-            raw_graph_ops = self.generate_new_graph(query, self.current_graph, self.past_graphs, resource_info)
-            print("Raw graph out:", raw_graph_ops)
-            graph_ops = extract_dict_from_string(raw_graph_ops)
-            if 'ADD' in graph_ops:
-                self.current_graph.extend([g for g in graph_ops['ADD'] if g in self.title2doc])
-            if 'SUBTRACT' in graph_ops:
-                self.current_graph = [source for source in self.current_graph if source not in graph_ops['SUBTRACT']]
-            if 'OVERHAUL' in graph_ops:
-                self.current_graph = [g for g in graph_ops['OVERHAUL'] if g in self.title2doc]
-            if 'GO_BACK' in graph_ops:
-                self.current_graph = self.past_graphs[int(graph_ops['GO_BACK'])][1]
+        full_response = ""
+        for chunk in stream:
+            full_response += chunk
+            yield chunk  # Stream to client
 
-            if self.current_graph:
-                graph = self.retrieve_graph(courses, certificates, self.current_graph)
-                self.current_nx_graph = graph
-                _, e = graph_to_2d_array(graph)
-                graph_str = display_edges(e)
-            else:
-                graph = nx.DiGraph()
-                graph_str = ""
-            
-            retrieved_docs = [doc for doc in retrieved_docs if doc['metadata']['title'] in self.current_graph]
-            
-            print("graph ops:", graph_ops)
-            print("Current graph resources:", self.current_graph)
-            self.past_graphs.append((query, self.current_graph))
-
-            if len(self.current_graph) > 0:
-                n, e = graph_to_2d_array(graph)
-                graph_str = display_edges(e)
-                self.current_nx_graph = graph
-
-            response = self.generate_general_response(query, retrieved_docs, user_profile, 'Graph', graph_str)
-            #response = "The graph is updated with your changes. Please let me know if you have questions about any of the courses or certificates!"
-            self.add_to_history("user", query)
-            self.add_to_history("assistant", response)
-            return response, graph
+        # Save full response at the end
+        self.add_to_history("assistant", full_response)
 
     def grouper(self, query):
         # Construct the prompt
@@ -422,7 +412,15 @@ class BasicRAG:
 
         A USER QUERY IS CATEGORIZED INTO ONE OF THE FOLLOWING TYPES:
 
-        1. General Request  
+        1. Irrelevant Request  
+        The query is completely, entirely irrelevent, then we should not entertain it!
+
+        Examples:
+        - "What's the weather like today?"
+        - "Tell me a joke."
+        - "Can you help me fix my printer?"
+
+        2. General Request  
         In this case the query is a general question, asking for information about Adobe programs, courses, or certificates without requesting a specific learning path. 
         It could also ask general logistical and programmatic questions about Adobe courses and certifications. This will mostly rely on the user query. 
 
@@ -435,7 +433,7 @@ class BasicRAG:
 
         If user wants anything AT ALL to do with the current learning path, please default to the third option below:
 
-        2. Modifying or Creating a Course Graph/Trajectory
+        3. Modifying or Creating a Course Graph/Trajectory
         The user wants to receive a recommended course/certificate path or make changes to a previously suggested learning trajectory. This will rely on the user query and previous conversation.
 
         Examples:
@@ -452,7 +450,7 @@ class BasicRAG:
         User Query:  
         "{query}"
 
-        Respond with ONLY a number: `1` or `2` — indicating the category of the request.  
+        Respond with ONLY a number: `1`,`2`, or `3` — indicating the category of the request.  
         No additional words, explanations, or symbols.
         """
         try:
@@ -462,7 +460,7 @@ class BasicRAG:
                     {"role": "system", "content": "You are a helpful assistant."},
                     {"role": "user", "content": prompt},
                 ],
-                temperature=0.7,
+                temperature=self.temperature,
                 seed=42
             )
             assistant_response = response.choices[0].message.content
@@ -473,21 +471,24 @@ class BasicRAG:
             return error_str
     
     def find_bucket(self, query: str):
+        if self.chat_history and query in [self.chat_history[-1]['content'], self.chat_history[-2]['content']]:
+            return self.role
+        
         response = self.grouper(query).strip()
 
+        # if "1" in response:
+        #     self.role = Bucket.GENERAL
+        # elif "2" in response:
+        #     self.role = Bucket.GRAPH
+
         if "1" in response:
-            self.role = Bucket.GENERAL
+            self.role = Bucket.IRRELEVANT
         elif "2" in response:
+            self.role = Bucket.GENERAL
+        elif "3" in response:
             self.role = Bucket.GRAPH
         else:
+            print("Warning: Unable to classify query response properly.")
             self.role = Bucket.IRRELEVANT  # fallback
-        # if "1" in response:
-        #     self.role = Bucket.IRRELEVANT
-        # elif "2" in response:
-        #     self.role = Bucket.GENERAL
-        # elif "3" in response:
-        #     self.role = Bucket.GRAPH
-        # else:
-        #     print("Warning: Unable to classify query response properly.")
-        #     self.role = Bucket.IRRELEVANT  # fallback
+        
         return self.role    

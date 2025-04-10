@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
 from flask_caching import Cache
 import os
@@ -88,19 +88,15 @@ def survey():
     user_data = data
     return jsonify({"status": "ok", "received": data}), 200
 
-@app.route('/api/get_graph', methods=['POST'])
-def get_graph():
-    global current_graph_items
-
+@app.route('/api/update_graph', methods=['POST'])
+def update_graph():
     data = request.get_json()
-    message = data['category']
+    query = data['category']
     
-    response, graph = rag.run_rag_pipeline(message, courses, certificates, user_data)
+    graph = rag.update_graph_state(query, courses, certificates, user_data)
 
     if len(graph) > 0:
         nodes, edges = graph_to_2d_array(graph)
-
-        # Flatten and extract node names
         current_graph_items = [
             node['display']
             for row in nodes
@@ -114,12 +110,22 @@ def get_graph():
     return jsonify({
         "nodes": nodes,
         "edges": edges,
-        "message": response,
         "current_items": current_graph_items
     }), 200
 
-
     # Perform any server-side actions here
+
+@app.route('/api/stream_response', methods=['POST'])
+def stream_response():
+    data = request.get_json()
+    query = data['category']
+
+    def generate():
+        for token in rag.run_rag_pipeline_stream(query, courses, certificates, user_data):
+            yield token
+
+    return Response(generate(), mimetype='text/plain')
+
 
 @app.route('/api/set_current_graph', methods=['POST'])
 def set_current_graph():

@@ -202,3 +202,27 @@ def display_edges(edges):
 
 def get_full_string(nodes, edges):
     return display_nodes(nodes) + display_edges(edges)
+
+def graph_to_json(nodes, edges):
+    flat_nodes = list(flatten(nodes))
+    return {
+        "nodes": [
+            {
+                "type": node["type"],
+                "name": node["display"],
+                "data": node["data"]
+            }
+            for node in flat_nodes
+        ],
+        "edges": [
+            {
+                "from": edge["from"],
+                "to": edge["to"]
+            }
+            for edge in edges
+        ]
+    }
+
+def get_graph_json_string(nodes, edges, indent=2):
+    """Return a pretty-printed JSON string version of the graph"""
+    return json.dumps(graph_to_json(nodes, edges), indent=indent)
