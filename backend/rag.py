@@ -56,13 +56,16 @@ class BasicRAG:
             print(docs[0].keys())
         return "\n\n".join(
             [
-                f"<h3>{doc['metadata']['title']}</h3> <p>THIS IS A {doc['metadata']['type'].upper()}</p>" +
-                "".join(f"<p><strong>{key.replace('_', ' ').title()}:</strong> {value}</p>"
-                        for key, value in doc['metadata'].items() if key != "title")
+                f"<h3>{doc['metadata']['title']}</h3> <p><strong>THIS IS A {doc['metadata']['type'].upper()}</strong></p>" +
+                "".join(
+                    f"<p><strong>{key.replace('_', ' ').title()}:</strong> {value}</p>"
+                    for key, value in doc['metadata'].items() if key != "title"
+                ) +
+                f"<p><strong>Full Text:</strong> {doc.get('text', '[No text stored]')}</p>" 
                 for doc in docs
             ]
         )
-    
+
     def add_to_history(self, role: str, content: str):
         """Appends a new entry to the chat history."""
         self.chat_history.append({"role": role, "content": content})
@@ -78,6 +81,7 @@ class BasicRAG:
             supplement_docs = self.supplement_store.query_documents(query_text=query, top_k=top_k)
             filtered_docs += supplement_docs  # same as all_docs = all_docs + supplement_docs
 
+        print("Inner context")
         context = self.format_docs_context(filtered_docs)
 
         return context, filtered_docs
@@ -266,8 +270,7 @@ class BasicRAG:
         <h3>Current User Query:</h3>
         <p>{query}</p>
 
-        <h3>Resource Graph:</h3>
-        <p>{graph_str}</p>
+        {graph_str}
 
         <h3>Retrieved Course & Certificate Documents:</h3>
         <p>{self.format_docs_context(documents)}</p>

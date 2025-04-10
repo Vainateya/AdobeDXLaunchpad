@@ -53,7 +53,7 @@ class DocumentStore:
                 "level": source.level,
                 "job_role": source.job_role,
                 "objectives": source.objectives,
-                "modules": ", ".join([m.title for m in source.modules]) 
+                "modules": ", ".join([m.title for m in source.modules])
             }
         elif isinstance(source, Certificate):
             text = f"{source.prereq} " + " ".join(source.study_materials)
@@ -71,7 +71,8 @@ class DocumentStore:
             metadata = {
                 "type": "program_info",
                 "title": source.display,
-                "filename": os.path.basename(source.filepath)
+                "filename": os.path.basename(source.filepath),
+                "text": source.content
             }
         else:
             raise ValueError("Unsupported document type.")
@@ -85,19 +86,22 @@ class DocumentStore:
         self.collection.add(
             ids=[source.display],
             embeddings=[document["embedding"]],
-            metadatas=[document["metadata"]]
+            metadatas=[document["metadata"]],
+            documents=[document['text']]
         )
     
     def query_documents(self, query_text: str, top_k: int = 1) -> List[Dict]:
         """Retrieves the top K most relevant documents based on similarity search."""
         query_embedding = self.generate_embedding(query_text)
-        results = self.collection.query(query_embeddings=[query_embedding], n_results=top_k)
+        results = self.collection.query(query_embeddings=[query_embedding], n_results=top_k, include=['documents', 'metadatas'])
         
         retrieved_documents = []
         for i in range(len(results["ids"][0])):
+            print("Retrieved docs:", results["documents"])
             retrieved_documents.append({
                 "id": results["ids"][0][i],
-                "metadata": results["metadatas"][0][i]
+                "metadata": results["metadatas"][0][i],
+                "text": results["documents"][0][i]
             })
         return retrieved_documents
 
@@ -122,4 +126,6 @@ class DocumentStore:
                 "metadata": results["metadatas"][i],
                 "text": results["documents"][i] if results["documents"] else "[No text stored]"
             })
+        if results:
+            print("ALL DOCS RESULT KEYS:", results.keys())
         return documents

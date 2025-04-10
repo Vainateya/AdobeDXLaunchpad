@@ -4,4 +4,6 @@ dependency_graph/.env
 .venv/*
 key.txt
 backend/pickels/*
+backend/supplement_docs/*
+backend/chroma_storage/*
 backend/.env
