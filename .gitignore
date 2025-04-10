@@ -3,6 +3,7 @@ dependency_graph/.env
 **/__pycache__/**
 .venv/*
 key.txt
+
 backend/pickels/*
 backend/supplement_docs/*
 backend/chroma_storage/*

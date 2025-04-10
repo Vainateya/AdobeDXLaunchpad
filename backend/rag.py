@@ -53,15 +53,16 @@ class BasicRAG:
 
     def format_docs_context(self, docs):
         if docs:
-            print(docs[0].keys())
+            for doc in docs:
+                print(doc['metadata'].keys())
+        
         return "\n\n".join(
             [
                 f"<h3>{doc['metadata']['title']}</h3> <p><strong>THIS IS A {doc['metadata']['type'].upper()}</strong></p>" +
                 "".join(
                     f"<p><strong>{key.replace('_', ' ').title()}:</strong> {value}</p>"
                     for key, value in doc['metadata'].items() if key != "title"
-                ) +
-                f"<p><strong>Full Text:</strong> {doc.get('text', '[No text stored]')}</p>" 
+                )
                 for doc in docs
             ]
         )

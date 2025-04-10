@@ -72,7 +72,7 @@ class DocumentStore:
                 "type": "program_info",
                 "title": source.display,
                 "filename": os.path.basename(source.filepath),
-                "text": source.content
+                "content": text
             }
         else:
             raise ValueError("Unsupported document type.")
@@ -86,8 +86,7 @@ class DocumentStore:
         self.collection.add(
             ids=[source.display],
             embeddings=[document["embedding"]],
-            metadatas=[document["metadata"]],
-            documents=[document['text']]
+            metadatas=[document["metadata"]]
         )
     
     def query_documents(self, query_text: str, top_k: int = 1) -> List[Dict]:
@@ -97,7 +96,6 @@ class DocumentStore:
         
         retrieved_documents = []
         for i in range(len(results["ids"][0])):
-            print("Retrieved docs:", results["documents"])
             retrieved_documents.append({
                 "id": results["ids"][0][i],
                 "metadata": results["metadatas"][0][i],
@@ -123,9 +121,7 @@ class DocumentStore:
         for i in range(len(results["ids"])):
             documents.append({
                 "id": results["ids"][i],
-                "metadata": results["metadatas"][i],
-                "text": results["documents"][i] if results["documents"] else "[No text stored]"
+                "metadata": results["metadatas"][i]
             })
-        if results:
-            print("ALL DOCS RESULT KEYS:", results.keys())
+
         return documents
