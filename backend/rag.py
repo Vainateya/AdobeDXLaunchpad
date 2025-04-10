@@ -212,12 +212,12 @@ class BasicRAG:
             print(error_str)
             return error_str
         
-    def generate_general_response(self, query, documents: str, user_profile, graph_str_raw=""):
+    def generate_general_response(self, query, documents: str, user_profile, bucket, graph_str_raw=""):
         chat_history_text = self.format_chat_history()
-        print("QUERY", query)
-        print("documents", documents)
-        print("user_profile", user_profile)
-        print("graph_str_raw", graph_str_raw)
+        # print("QUERY", query)
+        # print("documents", documents)
+        # print("user_profile", user_profile)
+        # print("graph_str_raw", graph_str_raw)
 
         graph_str = ""
         if graph_str_raw:
@@ -241,6 +241,9 @@ class BasicRAG:
 
         <h3>Current User Query:</h3>
         <p>{query}</p>
+
+        <h3>Bucket categorization: if this is General, then utilize primarily the current user query. Otherwise, utilize the query and chat_history equally.</h3>
+        <p>{bucket}</p>
 
         <h3>Retrieved Course & Certificate Documents, THIS IS IMPORTANT, this is all the relevant information from Adobe regarding this request. Please put your responses using this information:</h3>
         <p>{documents}</p>
@@ -296,6 +299,9 @@ class BasicRAG:
                 temperature=0.7
             )
             assistant_response = response.choices[0].message.content
+            lines = assistant_response.splitlines()
+            assistant_response = "\n".join(lines[1:-1])
+            print(assistant_response)
             return assistant_response
         except Exception as e:
             error_str = f"An error occurred while generating a response: {e}"
@@ -358,7 +364,7 @@ class BasicRAG:
                 graph_str = ""
         
             retrieved_docs = self.retrieve_documents(query, top_k)
-            response = self.generate_general_response(query, retrieved_docs, user_profile, graph_str)
+            response = self.generate_general_response(query, retrieved_docs, user_profile, 'General', graph_str)
             self.add_to_history("user", query)
             self.add_to_history("assistant", response)
             return response, self.current_nx_graph
@@ -409,7 +415,7 @@ class BasicRAG:
                 graph_str = display_edges(e)
                 self.current_nx_graph = graph
 
-            response = self.generate_general_response(query, retrieved_docs, user_profile, graph_str)
+            response = self.generate_general_response(query, retrieved_docs, user_profile, 'Graph', graph_str)
             #response = "The graph is updated with your changes. Please let me know if you have questions about any of the courses or certificates!"
             self.add_to_history("user", query)
             self.add_to_history("assistant", response)
@@ -421,11 +427,7 @@ class BasicRAG:
 
         chat_history_text = self.format_chat_history()
 
-        prompt = f"""
-        YOU ARE AN ADOBE COURSE/CERTIFICATE RECOMMENDATION BOT. YOUR JOB IS TO IDENTIFY WHICH CATEGORY A USER'S CURRENT REQUEST FALLS UNDER.
-
-        A USER QUERY IS CATEGORIZED INTO ONE OF THE FOLLOWING TYPES:
-
+        """
         1. Irrelevant Request  
         The query is completely, entirely irrelevent, then we should not entertain it!
 
@@ -433,10 +435,16 @@ class BasicRAG:
         - "What's the weather like today?"
         - "Tell me a joke."
         - "Can you help me fix my printer?"
+        """
 
-        2. General Request  
+        prompt = f"""
+        YOU ARE AN ADOBE COURSE/CERTIFICATE RECOMMENDATION BOT. YOUR JOB IS TO IDENTIFY WHICH CATEGORY A USER'S CURRENT REQUEST FALLS UNDER.
+
+        A USER QUERY IS CATEGORIZED INTO ONE OF THE FOLLOWING TYPES:
+
+        1. General Request  
         In this case the query is a general question, asking for information about Adobe programs, courses, or certificates without requesting a specific learning path. 
-        It could also ask general logistical and programmatic questions about Adobe courses and certifications. 
+        It could also ask general logistical and programmatic questions about Adobe courses and certifications. This will mostly rely on the user query. 
 
         Examples:
         - "What types of courses does Adobe offer?"
@@ -447,8 +455,8 @@ class BasicRAG:
 
         If user wants anything AT ALL to do with the current learning path, please default to the third option below:
 
-        3. Modifying or Creating a Course Graph/Trajectory
-        The user wants to receive a recommended course/certificate path or make changes to a previously suggested learning trajectory.
+        2. Modifying or Creating a Course Graph/Trajectory
+        The user wants to receive a recommended course/certificate path or make changes to a previously suggested learning trajectory. This will rely on the user query and previous conversation.
 
         Examples:
         - "What’s the best path to reach Adobe Analytics Expert?"
@@ -464,7 +472,7 @@ class BasicRAG:
         User Query:  
         "{query}"
 
-        Respond with ONLY a number: `1`, `2`, or `3` — indicating the category of the request.  
+        Respond with ONLY a number: `1` or `2` — indicating the category of the request.  
         No additional words, explanations, or symbols.
         """
         try:
@@ -488,12 +496,18 @@ class BasicRAG:
         response = self.grouper(query).strip()
 
         if "1" in response:
-            self.role = Bucket.IRRELEVANT
-        elif "2" in response:
             self.role = Bucket.GENERAL
-        elif "3" in response:
+        elif "2" in response:
             self.role = Bucket.GRAPH
         else:
-            print("Warning: Unable to classify query response properly.")
             self.role = Bucket.IRRELEVANT  # fallback
+        # if "1" in response:
+        #     self.role = Bucket.IRRELEVANT
+        # elif "2" in response:
+        #     self.role = Bucket.GENERAL
+        # elif "3" in response:
+        #     self.role = Bucket.GRAPH
+        # else:
+        #     print("Warning: Unable to classify query response properly.")
+        #     self.role = Bucket.IRRELEVANT  # fallback
         return self.role    
