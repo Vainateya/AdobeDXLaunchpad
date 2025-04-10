@@ -78,7 +78,6 @@ export default function Home() {
   const [certificationText, setCertificationText] = useState("");
   const [areaOfExpertise, setAreaOfExpertise] = useState("");
 
-
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
@@ -88,43 +87,87 @@ export default function Home() {
   useEffect(() => {
     const timer = setTimeout(() => setGlowActive(false), 5000);
     return () => clearTimeout(timer);
-}, []);
-  const handleSendMessage = () => {
+  }, []);
+  const updateGraphAndStreamResponse = async () => {
     if (!chatMessage.trim()) return;
     setLoading(true);
+    const userMessage = chatMessage;
+    setMessages((prev) => [...prev, { from: "user", text: userMessage }]);
+    setChatMessage("");
 
-    const requestOptions = {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ category: chatMessage }),
-    };
+    try {
+      // First, update graph
+      const graphResponse = await fetch(
+        "http://127.0.0.1:5000/api/update_graph",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ category: userMessage }),
+        }
+      );
 
-    fetch("http://127.0.0.1:5000/api/get_graph", requestOptions)
-      .then((response) => response.json())
-      .then((data) => {
-        const nodes = data.nodes;
-        const edges = data.edges;
-        const userMsgIndex = messages.length;
-        const newGraph = {
-          nodes,
-          edges,
-          message: data.message,
-          userMessage: chatMessage,
-          messageIndex: userMsgIndex, // this tracks which message index to scroll to
-        };
+      const graphData = await graphResponse.json();
+      updateGraph(graphData.nodes, graphData.edges);
 
-        setGraphHistory((prev) => [...prev, newGraph]);
-        setCurrentGraphIndex(graphHistory.length);
-        updateGraph(nodes, edges);
-        setMessages([
-          ...messages,
-          { from: "user", text: chatMessage },
-          { from: "api", text: data.message },
-        ]);
-        setChatMessage("");
-      })
-      .catch((error) => console.error("Error fetching data:", error))
-      .finally(() => setLoading(false));
+      const userMsgIndex = messages.length;
+      const newGraph = {
+        nodes: graphData.nodes,
+        edges: graphData.edges,
+        message: "", // will be filled after streaming
+        userMessage: userMessage,
+        messageIndex: userMsgIndex,
+      };
+      setGraphHistory((prev) => [...prev, newGraph]);
+      setCurrentGraphIndex(graphHistory.length);
+    } catch (err) {
+      console.error("Error updating graph:", err);
+      setLoading(false);
+      return;
+    }
+
+    // Then, stream assistant response
+    try {
+      const streamResponse = await fetch(
+        "http://127.0.0.1:5000/api/stream_response",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ category: userMessage }),
+        }
+      );
+
+      const reader = streamResponse.body?.getReader();
+      const decoder = new TextDecoder();
+      let result = "";
+
+      const newMessage = { from: "api", text: "" };
+      setMessages((prev) => [...prev, newMessage]);
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        result += chunk;
+
+        setMessages((prev) => {
+          const updated = [...prev];
+          updated[updated.length - 1] = {
+            ...updated[updated.length - 1],
+            text: result,
+          };
+          return updated;
+        });
+      }
+
+      setLoading(false);
+    } catch (err) {
+      console.error("Error streaming response:", err);
+      setLoading(false);
+    }
+  };
+
+  const handleSendMessage = () => {
+    updateGraphAndStreamResponse();
   };
 
   const handleKeyDown = (event) => {
@@ -150,9 +193,12 @@ export default function Home() {
         id: String(nodeData.display),
         data: {
           ...nodeData, // includes type, display, data
-          label: nodeData.type === "course" || nodeData.type === "certificate"
-			? `${nodeData.display} (${nodeData.type === "course" ? "Course" : "Certification"})`
-			: nodeData.display,
+          label:
+            nodeData.type === "course" || nodeData.type === "certificate"
+              ? `${nodeData.display} (${
+                  nodeData.type === "course" ? "Course" : "Certification"
+                })`
+              : nodeData.display,
         },
         position: {
           x: nodeOrigin[0] + colIndex * 200,
@@ -213,7 +259,8 @@ export default function Home() {
             {/* Question 1 */}
             <div className="mb-4">
               <label className="block text-sm font-medium mb-2">
-                1. Do you already have an Adobe certification or have you already done an Adobe course?
+                1. Do you already have an Adobe certification or have you
+                already done an Adobe course?
               </label>
               <div className="flex gap-4">
                 <button
@@ -233,35 +280,35 @@ export default function Home() {
                   No
                 </button>
               </div>
-            
-			  {/* Follow-up question */}
-			{isCertified === "yes" && (
-				<div className="mt-4">
-				<label className="block text-sm font-medium mb-2">
-					What Adobe course or certification(s) did you do?
-				</label>
-				<input
-					type="text"
-					className="w-full px-4 py-2 border border-gray-300 rounded bg-white text-black"
-					value={certificationText}
-					onChange={(e) => setCertificationText(e.target.value)}
-					placeholder="e.g., Adobe Analytics 1043, Campaign 1060"
-				/>
-				</div>
-			)}
-			</div>
 
-			{/* Question 2 */}
+              {/* Follow-up question */}
+              {isCertified === "yes" && (
+                <div className="mt-4">
+                  <label className="block text-sm font-medium mb-2">
+                    What Adobe course or certification(s) did you do?
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full px-4 py-2 border border-gray-300 rounded bg-white text-black"
+                    value={certificationText}
+                    onChange={(e) => setCertificationText(e.target.value)}
+                    placeholder="e.g., Adobe Analytics 1043, Campaign 1060"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Question 2 */}
             <div className="mb-4">
               <label className="block text-sm font-medium mb-2">
                 2. Area of expertise:
               </label>
               <input
                 type="text"
-				className="w-full px-4 py-2 border border-gray-300 rounded bg-white text-black"
-				value={areaOfExpertise}
-				onChange={(e) => setAreaOfExpertise(e.target.value)}
-				placeholder="e.g., Adobe Analytics 1043, Campaign 1060"
+                className="w-full px-4 py-2 border border-gray-300 rounded bg-white text-black"
+                value={areaOfExpertise}
+                onChange={(e) => setAreaOfExpertise(e.target.value)}
+                placeholder="e.g., Adobe Analytics 1043, Campaign 1060"
               />
             </div>
 
@@ -286,8 +333,8 @@ export default function Home() {
               onClick={() => {
                 const surveyData = {
                   certified: isCertified,
-				  certifications: certificationText,
-				  expertise: areaOfExpertise,
+                  certifications: certificationText,
+                  expertise: areaOfExpertise,
                   experience_years: experienceYears,
                 };
 
@@ -333,32 +380,42 @@ export default function Home() {
                 <div
                   key={index}
                   onClick={() => {
-					updateGraph(item.nodes, item.edges);
-					setCurrentGraphIndex(index);
-					setShowHistory(false);
-				  
-					// Scroll to corresponding chat message
-					const target = messageRefs.current[item.messageIndex];
-					if (target) {
-					  target.scrollIntoView({ behavior: "smooth", block: "start" });
-					}
-				  
-					// Fetch current graph items from backend
-					// Send current nodes to backend
-					console.log(" Sending nodes to backend:", item.nodes);
-					console.log(" Updated graph items sent to backend:", item.nodes);
-					fetch("http://127.0.0.1:5000/api/set_current_graph", {
-						method: "POST",
-						headers: { "Content-Type": "application/json" },
-						body: JSON.stringify({ nodes: item.nodes }),
-					})
-					.then((res) => res.json())
-					.then((data) => {
-					console.log(" Updated graph items sent to backend:", data.current_items);
-					})
-					.catch((err) => console.error("Error sending graph items:", err));
-  
-				  }}
+                    updateGraph(item.nodes, item.edges);
+                    setCurrentGraphIndex(index);
+                    setShowHistory(false);
+
+                    // Scroll to corresponding chat message
+                    const target = messageRefs.current[item.messageIndex];
+                    if (target) {
+                      target.scrollIntoView({
+                        behavior: "smooth",
+                        block: "start",
+                      });
+                    }
+
+                    // Fetch current graph items from backend
+                    // Send current nodes to backend
+                    console.log(" Sending nodes to backend:", item.nodes);
+                    console.log(
+                      " Updated graph items sent to backend:",
+                      item.nodes
+                    );
+                    fetch("http://127.0.0.1:5000/api/set_current_graph", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ nodes: item.nodes }),
+                    })
+                      .then((res) => res.json())
+                      .then((data) => {
+                        console.log(
+                          " Updated graph items sent to backend:",
+                          data.current_items
+                        );
+                      })
+                      .catch((err) =>
+                        console.error("Error sending graph items:", err)
+                      );
+                  }}
                   className={`text-white text-sm p-3 rounded mb-2 cursor-pointer ${
                     index === currentGraphIndex
                       ? "bg-[#EB1000]"
@@ -509,12 +566,12 @@ export default function Home() {
           </button>
         </div>
       </div>
-	<button
+      <button
         className="glow-button fixed hover:bg-red-700 bottom-6 left-6 z-50 wiggle-once"
         onClick={() => setShowSurvey(true)}
-        >
+      >
         Answer a Few Questions
-    </button>
+      </button>
     </div>
   );
 }
