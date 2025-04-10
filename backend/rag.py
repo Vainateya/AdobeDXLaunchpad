@@ -122,79 +122,97 @@ class BasicRAG:
     def generate_new_graph(self, query, cur_resources={}, history=[], resource_info=""):
         # Construct the prompt
         # Structured prompt with HTML output
-        prompt = f"""
-            You are a trajectory recommender whose job is, given a list of sources (course or certificate), output a valid trajectory that consists of a subset of those sources and that follow the below rules perfectly.
 
-            Source Types - There are two types of sources:
-            - Courses: format = <category> <level>
-            - Certificates: format = <category> <job role> <level>
+        prompt = f'''You are a strict, rules-based trajectory planner that simulates valid learning pathways. Your task is to return a JSON object with one of the following operations: ADD, SUBTRACT, OVERHAUL, GO_BACK, or NO_CHANGE. You must only work with the resources explicitly listed in the 'Resources you should know about' section. Follow all rules below exactly. Violating any rule will make the response invalid.
+        
+        Only include the operation(s) you are instructed to perform. You may not mix operations unless explicitly allowed. For example, you may not combine ADD and OVERHAUL. GO_BACK must be an integer index into resource history.
 
-            Course Levels (in order):
-            - Foundations → Professional → Expert
+        -----------------------------------
+        RULES (MUST BE FOLLOWED EXACTLY)
+        -----------------------------------
 
-            A course can only require the previous level in the same category.
-            - Example: Adobe Analytics Foundations → Adobe Analytics Professional (valid)
-            - Adobe Analytics Foundations → Adobe Commerce Professional (invalid)
-
-            Certificate Levels (in order):
-            - Professional → Expert → Master
-
-            Certificates have the same prerequisite structure as courses.
-            - Job role is NOT used for prerequisites, but only show certificates matching the user's job role (or with job role All).
-
-            Cross-Dependencies (Courses → Certificates) - Courses can be prerequisites for certificates if the category matches:
+        - R1 (Course Progression): Courses follow this order — Foundations → Professional → Expert — within the SAME category.
+        - R2 (Certificate Progression): Certificates follow this order — Professional → Expert → Master — within the SAME category.
+        - R3 (Course → Certificate Cross-Dependencies): Courses may serve as prerequisites for certificates ONLY if the level and category match:
             - Foundations course → Professional certificate
             - Professional course → Expert certificate
             - Expert course → Master certificate
+        - R4 (Same Category Required): Resources must share the same category to be part of a valid prerequisite chain. A Foundations course in Adobe Analytics does NOT unlock a Professional course in Adobe Commerce.
+        - R5 (Job Role Filtering for Certificates): Certificates must match the user’s job role, or be tagged with the job role "All".
+        - R6 (No Level Skipping): You must not skip levels. For example, you cannot go from a Foundations course directly to an Expert course.
 
-            Summary of Rules:
-            - Match levels in order (no skipping) within the same category.
-            - Prerequisites MUST be in the SAME category AND follow the level order.
-            - Certificates must also match the user's job role (or be All).
-            - Course → Certificate prerequisites allowed as per cross-dependency mapping.
-            
-            Resource History - The previous trajectories at previous iterations. Sometimes the user may want to reference an earlier trajectory, though sometimes they may not.
+        -----------------------------------
+        OPERATIONS DEFINITION
+        -----------------------------------
 
-            Current Resouces in Graph - This is the current trajectory the user is discussing. The user may want to add resources, remove resources, or completely disregard the current trajectory and come up with a new one.
-            You have the following operations:
-            - ADD: ONLY add resources to the current graph from resources listed in 'Resources you should know about'. You can ONLY add resources matching the type(s) the user requests—courses, certificates, study guides, or a combination. You CANNOT remove any resources unless performing alongside a SUBTRACT operation. (e.g., "Can you add more certificates related to Python programming?")
-            - SUBTRACT: ONLY remove resources from the current graph. This typically happens when the user explicitly requests fewer resources or asks to remove specific resources or resource types. You CANNOT add any resources unless performing alongside an ADD operation. (e.g., "Please remove any advanced-level courses." or "Take out the AWS certification.")
-            - OVERHAUL: Disregard the current graph entirely and create a completely new graph - You MUST generate new nodes, this cannot return an empty list. Usually chosen when the user requests a fresh start or completely switches fields/topics. Cannot be combined with any other operation. (e.g., "Create a new graph focused exclusively on machine learning certifications.")
-            - GO_BACK: Disregard the current graph and return to a previously saved graph state (timestep) stored in 'Resource History'. Unlike other operations, you must return an index (timestep), not a graph. Cannot be combined with other operations. (e.g., "Go back to the previous version of the graph," or "Undo the last change.")
-            - NO_CHANGE: Used when the user does not request any changes. Return the current graph without alterations. Cannot be combined with other operations. (e.g., "What courses do I currently have?" or "Just show me my current graph.")
+        - ADD: Only add new resources to the current graph from those listed in 'Resources you should know about'. Do not remove existing resources unless performing SUBTRACT simultaneously.
+        - SUBTRACT: Only remove resources from the current graph. Do not add new resources unless paired with ADD.
+        - OVERHAUL: Completely discard the current graph and replace it with a brand new valid trajectory. This operation cannot be combined with any other.
+        - GO_BACK: Restore the resource graph to a previous state, specified by index from 'Resource History'. Do not include any resource names.
+        - NO_CHANGE: Return the current graph unchanged. Use this when the user does not request modifications.
 
-            Format the response to this as a set of the operations: {{ "OPERATION_1": ["COURSE_NAME_1", "COURSE_NAME_2", ...], "OPERATION_2": ["COURSE_NAME_3", "COURSE_NAME_4", ...] }}. If the operation is GO_BACK, return {{ GO_BACK: INDEX }}
-            
-            IT IS OF UTMOST IMPORTANCE THAT THESE RULES ARE FOLLOWED PERFECTLY WHEN OUTPUTTING A LIST OF NODES.
-            
-            <h2>Resources you should know about</h2>:
-            <p>
-            {resource_info}
-            </p>
+        -----------------------------------
+        RESOURCE DEFINITIONS
+        -----------------------------------
 
-            Example:
-            <h2>User Query:</h2>
-            <p>This is too hard - can you give me easier classes?</p>
-            <h2>Current Resouces in Graph</h2>
-            <p>
-            ["Adobe Analytics Foundations", "Adobe Analytics Business Practitioner Professional", "Adobe Analytics Business Practitioner Expert", "Adobe Analytics Architect Master"]
-            </p>
-            <h2>Resource History:</h2>
-            <p>At time 0: User asked 'Give me a course trajectory to get good at Adobe Analytics'. Resources in the resource graph at that time were ['Adobe Analytics Foundations', 'Adobe Analytics Business Practitioner Professional', 'Adobe Analytics Business Practitioner Expert']</p>
-            <h2>Response:</h2>
-            <p>
-            {{ "SUBTRACT": ["Adobe Analytics Foundations"] }}
-            </p>
-            
-            The following is the true input:
-            <h2>User Query:</h2>
-            <p>{query}</p>
-            <h2>Current Resouces in Graph</h2>
-            <p>{str(cur_resources)}</p>
-            <h2>Resource History:</h2>
-            <p>{self.format_past_graphs(history)}</p>
-            <h2>Response:</h2>
-            """
+        {resource_info}
+
+        
+        -----------------------------------
+        OUTPUT FORMAT
+        -----------------------------------
+
+        Your output must be a JSON object in the following possible formats:
+        Option 1: Adding, Subtracting, or Both: 
+        Response: {{
+        "ADD": ["RESOURCE_1", "RESOURCE_2"],
+        "SUBTRACT": ["RESOURCE_3"],
+        }}
+        
+        Option 2: OVERHAUL, no other operations
+        Response: {{
+        "OVERHAUL": ["RESOURCE_4", "RESOURCE_5"],
+        }}
+        
+        Option 3: GO_BACK, no other operations
+        Response: {{
+        "ADD": ["RESOURCE_1", "RESOURCE_2"],
+        "SUBTRACT": ["RESOURCE_3"],
+        "OVERHAUL": ["RESOURCE_4", "RESOURCE_5"],
+        "GO_BACK": 0,
+        "NO_CHANGE": []
+        }}
+
+        Option 4: NO_CHANGE, no other operations
+        Response: {{
+        "NO_CHANGE": []
+        }}
+
+        -----------------------------------
+        EXAMPLES
+        -----------------------------------
+
+        # Example 1: Valid Overhaul
+        User Query: "Build me a full Adobe Analytics journey."
+        Response:
+        {{
+        "OVERHAUL": ["Adobe Analytics Foundations", "Adobe Analytics Business Practitioner Professional", "Adobe Analytics Business Practitioner Expert"]
+        }}
+
+        # Example 2: Invalid category jump
+        User Query: "Add Adobe Commerce Professional course after Adobe Analytics Foundations."
+        Response:
+        {{
+        "ADD": []  # Invalid. Cannot add Professional course from a different category.
+        }}
+
+        Now respond to the following:
+        User Query: {query}
+        Current Resources in Graph: {str(cur_resources)}
+        Resource History: {self.format_past_graphs(history)}
+        '''
+
+
         try:
             print("Prompt:", prompt)
             response = self.client.chat.completions.create(
@@ -308,45 +326,6 @@ class BasicRAG:
             print(error_str)
             return error_str
 
-    def generate_graph_args(self, query:str):
-        chat_history_text = self.format_chat_history(html=False)
-
-        prompt = f"""
-            YOU ARE AN ADOBE COURSE/CERTIFICATE RECCOMENDATION BOT. 
-            HOWEVER, YOU WILL ONLY USE THE SUPPORTING COURSE INFORMATION AND DOCUMENTS WHEN A USER ASKS FOR A COURSE RECCOMENDATION OR WHEN THEIR QUERY IS SPECIFIC. 
-            IN MOST CASES YOU WILL ASK FOLLOWUP QUESIONS TO GAUGE THEIR INTERESTS BETTER. 
-                            
-            Previous Conversation: "{chat_history_text}"
-            User Query: "{query}"
-            Instructions: Using the Previous Conversation and User Query, output three metrics - job roles and information level. 
-            For job roles, there are four options. Business Practitioners are responsible for designing, executing, and managing marketing campaigns using Adobe Experience Cloud solutions. They should have a foundational understanding of Adobe’s digital marketing solutions, as well as experience in marketing and advertising. The Business Practitioner certification validates their ability to effectively use Adobe’s digital marketing solutions to achieve business objectives. Developers are responsible for implementing and integrating Adobe Experience Cloud solutions into an organization’s technology stack. They should have experience in software development and proficiency in web technologies, such as HTML, CSS, JavaScript, and RESTful APIs. The Developer certification validates their ability to effectively implement and customize Adobe’s digital marketing solutions to meet business requirements. Architects are responsible for designing and implementing enterprise-grade solutions using Adobe Experience Cloud solutions. All indicates they may be interested in each of the previous three roles. Select the roles the user is interested in across "Developer, Business Practitioner, Architect, or 'All'.
- 
-            For information level, select how descriptive you think the user wants the results to be from "low", "medium", "high".
-
-            Output your answer in the form [JOB_ROLES, INFORMATION_LEVEL], where JOB_ROLES is a list of strings, INFORMATION_LEVEL is a string.
-
-            Example Output: [["All"], "medium"]
-            Example Output: [["Developer", "Architect"], "high"]
-
-            Output:
-            """
-
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant."},
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=0.7
-            )
-            assistant_response = response.choices[0].message.content
-            parsed_response = ast.literal_eval(assistant_response)
-            print("parsed_response", parsed_response)
-            return parsed_response
-        except Exception as e:
-            return f"An error occurred while generating a response: {e}"
-    
     def run_rag_pipeline(self, query: str, courses, certificates, user_profile, top_k: int = 5) -> str:
         """Runs the full RAG pipeline: retrieves documents and generates a response."""
         bucket = self.find_bucket(query)
@@ -385,6 +364,7 @@ class BasicRAG:
             resource_info = self.format_docs_context(current_docs)
 
             raw_graph_ops = self.generate_new_graph(query, self.current_graph, self.past_graphs, resource_info)
+            print("Raw graph out:", raw_graph_ops)
             graph_ops = extract_dict_from_string(raw_graph_ops)
             if 'ADD' in graph_ops:
                 self.current_graph.extend([g for g in graph_ops['ADD'] if g in self.title2doc])
