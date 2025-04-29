@@ -55,12 +55,25 @@ action = data['action']
 course_numbers = data['courses']
 certificate_htmls_location = data['certificates']
 
-if action == 'add':
-    certificates = load_sources_pickle(certificates_save_location)
-    courses = load_sources_pickle(courses_save_location)
+if not os.path.exists(f'{save_folder}/config.json'):
+    if action == 'add':
+        certificates = load_sources_pickle(certificates_save_location)
+        courses = load_sources_pickle(courses_save_location)
+    scrape()
+else:
+    f = open(f'{save_folder}/config.json')
+    loaded_data = json.load(f)
+    if loaded_data != data: # need to make changes
+        if action == 'add':
+            certificates = load_sources_pickle(certificates_save_location)
+            courses = load_sources_pickle(courses_save_location)
+        scrape()
+    else:
+        certificates = load_sources_pickle(certificates_save_location)
+        courses = load_sources_pickle(courses_save_location)
 
-scrape()
-
+with open(f'{save_folder}/config.json', 'w') as file:
+    json.dump(data, file, indent=4)
 user_data = {}
 
 # if not os.path.exists(courses_save_location) or not os.path.exists(certificates_save_location):
