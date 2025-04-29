@@ -2,9 +2,9 @@ from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
 from flask_caching import Cache
 import os
-
+import json
 from tqdm import tqdm
-import os
+
 
 from utils import *
 from graph_utils import *
@@ -25,26 +25,12 @@ for fname in os.listdir("./supplemental_sources"):
     if fname.endswith(".txt"):
         doc = TextDocument(os.path.join("./supplemental_sources", fname))
         program_store.add_document(doc)
-        
-
-courses = []
-certificates = []
-
-course_numbers = [
-    1043, 1045, 1046, 1047, 1048, 1049, 1050, 1054, 1055, 1056, 
-    1057, 1058, 1059, 1060, 1061, 1062, 1063, 1064, 1065, 1066, 
-    1067, 1068, 1069, 1221
-]
-
-certificate_htmls_location = '../dependency_graph/certificate_htmls'
 
 save_folder = "pickels"
 certificates_save_location = os.path.join(save_folder, "certificates.pkl")
 courses_save_location = os.path.join(save_folder, "courses.pkl")
 
-user_data = {}
-
-if not os.path.exists(courses_save_location) or not os.path.exists(certificates_save_location):
+def scrape():
     print("Scraping resources...")
     if not os.path.exists(save_folder):
         os.makedirs(save_folder)
@@ -53,15 +39,48 @@ if not os.path.exists(courses_save_location) or not os.path.exists(certificates_
         new_course = Course(f'https://certification.adobe.com/courses/{n}')
         courses.append(new_course)
     save_sources_pickle(courses, courses_save_location)
-
-    for html in tqdm(os.listdir(certificate_htmls_location)):
-        certificate = Certificate(f'{certificate_htmls_location}/{html}')
-        certificates.append(certificate)
+    if certificate_htmls_location != '':
+        for html in tqdm(os.listdir(certificate_htmls_location)):
+            certificate = Certificate(f'{certificate_htmls_location}/{html}')
+            certificates.append(certificate)
     save_sources_pickle(certificates, certificates_save_location)
-else:
-    print("Loading resources...")
+        
+courses = []
+certificates = []
+
+f = open('configs/config.json')
+data = json.load(f)
+
+action = data['action']
+course_numbers = data['courses']
+certificate_htmls_location = data['certificates']
+
+if action == 'add':
     certificates = load_sources_pickle(certificates_save_location)
     courses = load_sources_pickle(courses_save_location)
+
+scrape()
+
+user_data = {}
+
+# if not os.path.exists(courses_save_location) or not os.path.exists(certificates_save_location):
+#     print("Scraping resources...")
+#     if not os.path.exists(save_folder):
+#         os.makedirs(save_folder)
+    
+#     for n in tqdm(course_numbers):
+#         new_course = Course(f'https://certification.adobe.com/courses/{n}')
+#         courses.append(new_course)
+#     save_sources_pickle(courses, courses_save_location)
+
+#     for html in tqdm(os.listdir(certificate_htmls_location)):
+#         certificate = Certificate(f'{certificate_htmls_location}/{html}')
+#         certificates.append(certificate)
+#     save_sources_pickle(certificates, certificates_save_location)
+# else:
+#     print("Loading resources...")
+#     certificates = load_sources_pickle(certificates_save_location)
+#     courses = load_sources_pickle(courses_save_location)
 
 
 app = Flask(__name__)
