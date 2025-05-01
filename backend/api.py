@@ -38,11 +38,13 @@ def scrape():
     for n in tqdm(course_numbers):
         new_course = Course(f'https://certification.adobe.com/courses/{n}')
         courses.append(new_course)
+        store.add_document(new_course)
     save_sources_pickle(courses, courses_save_location)
     if certificate_htmls_location != '':
         for html in tqdm(os.listdir(certificate_htmls_location)):
-            certificate = Certificate(f'{certificate_htmls_location}/{html}')
-            certificates.append(certificate)
+            new_certificate = Certificate(f'{certificate_htmls_location}/{html}')
+            certificates.append(new_certificate)
+            store.add_document(new_certificate)
     save_sources_pickle(certificates, certificates_save_location)
         
 courses = []
@@ -54,6 +56,8 @@ data = json.load(f)
 action = data['action']
 course_numbers = data['courses']
 certificate_htmls_location = data['certificates']
+
+store = DocumentStore(similarity_metric="cosine", storage_path="./chroma_storage")
 
 if not os.path.exists(f'{save_folder}/config.json'):
     if action == 'add':
@@ -101,14 +105,8 @@ CORS(app, supports_credentials=True)
 app.config['CACHE_TYPE'] = 'simple'
 cache = Cache(app)
 
-store = DocumentStore(similarity_metric="cosine", storage_path="./chroma_storage")
 if store.collection.count() == 0:
     print("No documents found in ChromaDB. Re-adding documents...")
-    for course in courses:
-        store.add_document(course)
-    for certificate in certificates:
-        store.add_document(certificate)
-    print(f"Total documents after reloading: {store.collection.count()}")
 
 rag = BasicRAG(document_store=store, supplement_store = program_store)
 

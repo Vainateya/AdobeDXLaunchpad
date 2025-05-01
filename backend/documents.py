@@ -64,7 +64,8 @@ class DocumentStore:
                 "level": source.level,
                 "job_role": source.job_role,
                 "prereq": source.prereq,
-                "study_materials": "; ".join(source.study_materials)
+                "study_materials": "; ".join(source.study_materials),
+                "details": "; ".join([k + v for k, v in source.details.items()])
             }
         elif isinstance(source, TextDocument):
             text = source.content
