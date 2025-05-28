@@ -126,6 +126,7 @@ class BasicRAG:
         )
         current_docs = [self.title2doc[g] for g in self.current_graph if g in self.current_graph and 'Study Materials' not in g] + retrieved_docs
         resource_info = self.format_docs_context(current_docs)
+        print(retrieved_docs)
 
         raw_graph_ops = self.chat.generate_graph_call(
             query=query, 

@@ -48,22 +48,22 @@ class DocumentStore:
             text = f"{source.objectives} " + " ".join([m.description for m in source.modules])
             metadata = {
                 "type": "course",
-                "title": source.display,
-                "category": source.category,
-                "level": source.level,
-                "job_role": source.job_role,
-                "objectives": source.objectives,
+                "title":      (source.display   or ""),          
+                "category":   (source.category  or ""),          
+                "level":      (source.level     or ""),          
+                "job_role":   (source.job_role  or ""),         
+                "objectives": (source.objectives or ""),        
                 "modules": ", ".join([m.title for m in source.modules])
             }
         elif isinstance(source, Certificate):
             text = f"{source.prereq} " + " ".join(source.study_materials)
             metadata = {
                 "type": "certificate",
-                "title": source.display,
-                "category": source.category,
-                "level": source.level,
-                "job_role": source.job_role,
-                "prereq": source.prereq,
+                "title":    (source.display  or ""),  
+                "category": (source.category or ""),   
+                "level":    (source.level    or ""),   
+                "job_role": (source.job_role or ""),   
+                "prereq":   (source.prereq   or ""),  
                 "study_materials": "; ".join(source.study_materials),
                 "details": "; ".join([k + v for k, v in source.details.items()])
             }
@@ -104,6 +104,7 @@ class DocumentStore:
                 "score": results["distances"][0][i],
             })
 
+        print(retrieved_documents)
         return retrieved_documents
 
     def get_category_from_best_document(self, query_text):

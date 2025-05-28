@@ -92,17 +92,24 @@ class Course(Source):
         soup = BeautifulSoup(r.content, 'html.parser')
 
         div = soup.find('div', class_='table-responsive mb-0 mb-xl-4')
-        rows = div.find('tbody').find('tr').find_all('td')
+        first_row_tds = div.find("tbody").find("tr").find_all("td")
 
-        application = self._clean(rows[0].text)
-        level = self._clean(rows[1].text)
-        job_role = self._clean(rows[2].text)
-        course_number = self._clean(rows[3].text)
-        points = int(self._clean(rows[4].text))
-        time = self._clean(rows[5].text)
-        num_modules = int(self._clean(rows[6].text))
+        headers = [th.get_text(strip=True) for th in soup.select("table thead th")]
 
-        if job_role != 'All':
+        row_values = {headers[i]: first_row_tds[i].get_text(strip=True) 
+                    for i in range(min(len(headers), len(first_row_tds)))}
+
+        application   = self._clean(row_values["Application"])   if "Application"   in row_values else "None"
+        level         = self._clean(row_values["Level"])         if "Level"         in row_values else "None"
+        course_number = self._clean(row_values["Course number"]) if "Course number" in row_values else "None"
+        job_role      = self._clean(row_values["Job role"])  if "Job role"       in row_values else "None"
+        points        = int(self._clean(row_values["Points"]))   if "Points"        in row_values else "None"
+        time          = self._clean(row_values["Time"])          if "Time"          in row_values else "None"
+        num_modules   = int(self._clean(row_values["Modules"]))  if "Modules"       in row_values else "None"
+
+        print("application", application)
+
+        if job_role and job_role != 'All':
             job_role = job_role[:-1]
 
         display = soup.find('h1', class_='text-white').text
