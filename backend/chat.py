@@ -162,11 +162,13 @@ class Chatter:
     def generate_hallucination_check_call(self, query, content):
         prompt=  f"""
         INSTRUCTIONS:
-        Answer if the QUERY be answered entirely by the information contained in the CONTENT block and NO OTHER information? 
-        If the answer to the query is NOT in the content, you are to respond with a NO. If it can, you are to respond with a YES.
+        Answer if the QUERY can be answered entirely by the information contained in the CONTENT block and NO OTHER information. 
+        The context was created by retrieving and concatenating the courses and certificates with the highest cosine similarity with the vector embedding of the QUERY.
+        If the answer to the query is NOT in the content and you CANNOT infer the correct answer from the given context, you are to respond with a NO. 
+        If the answer is directly in the context OR can be inferred from the context, you are to respond with a YES.
         
         OUTPUT FORMAT:
-        All responses should be in the string ANSWER, where ANSWER can only be 'YES' or 'NO'.
+        All responses should be in the string ANSWER, where the first part of ANSWER must be 'YES' or 'NO' - then provide a justification to your response.
 
         CONTENT: "{content}"
         QUERY: {query}
@@ -281,7 +283,7 @@ class Chatter:
         <li><strong>If the query asks for a course or certification recommendation</strong>: Use the Resource Graph if available. Otherwise use the retrieved documents. Always explain your reasoning, referencing level, role, or objectives.</li>
         <li><strong>If the query asks about specific programs</strong>: Summarize those programs from the most reliable source (Graph → Docs), and explain fit based on user role, level, or prior steps.</li>
         <li><strong>If the query is programmatic or logistical</strong>: Answer directly from document context.</li>
-        </ul>
+        <li><strong>Before recommending a resource from the retrieved documents</strong>, ensure it matches the user’s intent by checking the following fields: title, type, category, job_role, level, objectives, and modules. Your recommendation must be grounded in a clear match between the query and one or more of these fields, ESPECIALLY THE TYPE, TITLE, and CATEGORY.</li>        </ul>
 
         <h2><strong>Rules You Must Follow</strong></h2>
         <ul>

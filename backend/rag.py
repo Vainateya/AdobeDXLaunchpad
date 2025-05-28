@@ -8,6 +8,7 @@ from enum import Enum
 import re
 import ast
 from chat import Chatter
+from pprint import pprint
 
 class Bucket(Enum):
     IRRELEVANT = 1
@@ -16,6 +17,19 @@ class Bucket(Enum):
 
 COURSE_LEVELS = ['Foundations', 'Professional', 'Expert']
 CERT_LEVELS = ['Professional', 'Expert', 'Master']
+
+def yes_before_no(text: str):
+    t = text.upper()
+    i_yes = t.find("YES")
+    i_no  = t.find("NO")
+
+    if i_yes == -1 and i_no == -1:
+        return None          
+    if i_yes == -1:
+        return False         
+    if i_no == -1:
+        return True         
+    return i_yes < i_no
 
 def extract_dict_from_string(s: str):
     pattern = re.compile(r'\{.*?\}', re.DOTALL)
@@ -120,13 +134,14 @@ class BasicRAG:
     
         rag_query = 'Current resources in graph: ' + ', '.join("'" + name + "'" for name in self.current_graph) + " User Query: " + query
 
-        retrieved_docs = self.retrieve_documents(rag_query, top_k=10, exclude_supplement=True)[1]
+        retrieved_docs = self.retrieve_documents(rag_query, top_k=5, exclude_supplement=True)[1]
         retrieved_docs.extend(
             self.retrieve_documents(query, top_k=5, exclude_supplement=True, omit_titles=[d['metadata']['title'] for d in retrieved_docs])[1]
         )
         current_docs = [self.title2doc[g] for g in self.current_graph if g in self.current_graph and 'Study Materials' not in g] + retrieved_docs
         resource_info = self.format_docs_context(current_docs)
-        print(retrieved_docs)
+        print("retrieved_docs")
+        pprint(retrieved_docs)
 
         raw_graph_ops = self.chat.generate_graph_call(
             query=query, 
@@ -137,7 +152,7 @@ class BasicRAG:
             chat_history_text=self.format_chat_history()
         )
         # raw_graph_ops = self.generate_new_graph(query, str(self.current_graph), self.format_past_graphs(self.past_graphs), resource_info, user_profile=user_profile)
-        print(raw_graph_ops)
+        pprint(raw_graph_ops)
         graph_ops = extract_dict_from_string(raw_graph_ops)
 
         if 'ADD' in graph_ops:
@@ -177,23 +192,30 @@ class BasicRAG:
             query=query, 
             content=self.format_docs_context(retrieved_docs) + self.format_chat_history()
         )
-        print("PASSED VERIFICATION:", raw_verification)
-        stream = self.chat.stream_general_response_call(
-            query=query,
-            documents=retrieved_docs,
-            user_profile=user_profile,
-            graph_str_raw=graph_str,
-            chat_history_text=self.format_chat_history()
-        )
-        # stream = self.generate_general_response(query, retrieved_docs, user_profile, 'Graph' if bucket == Bucket.GRAPH else 'General', graph_str_raw=graph_str)
+        print(raw_verification)
+        passed_verification = yes_before_no(raw_verification)
+        if not passed_verification:
+            full_response = "I’m sorry, but I don’t have enough information to answer that accurately. Could you share a few more details?"
+            self.add_to_history("assistant", full_response)
+            yield full_response
+        else:
+            yield 
+            stream = self.chat.stream_general_response_call(
+                query=query,
+                documents=retrieved_docs,
+                user_profile=user_profile,
+                graph_str_raw=graph_str,
+                chat_history_text=self.format_chat_history()
+            )
+            # stream = self.generate_general_response(query, retrieved_docs, user_profile, 'Graph' if bucket == Bucket.GRAPH else 'General', graph_str_raw=graph_str)
 
-        full_response = ""
-        for chunk in stream:
-            full_response += chunk
-            yield chunk
+            full_response = ""
+            for chunk in stream:
+                full_response += chunk
+                yield chunk
 
-        # print(full_response)
-        self.add_to_history("assistant", full_response)
+            # print(full_response)
+            self.add_to_history("assistant", full_response)
 
     def find_bucket(self, query: str):
         if self.chat_history and query in [self.chat_history[-1]['content'], self.chat_history[-2]['content']]:
@@ -217,4 +239,4 @@ class BasicRAG:
             print("Warning: Unable to classify query response properly.")
             self.role = Bucket.IRRELEVANT  # fallback
         
-        return self.role    
+        return self.role 

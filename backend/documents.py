@@ -6,6 +6,7 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'dependency_graph')))
 from utils import *
+from pprint import pprint
 
 class TextDocument:
     def __init__(self, filepath: str):
@@ -104,7 +105,6 @@ class DocumentStore:
                 "score": results["distances"][0][i],
             })
 
-        print(retrieved_documents)
         return retrieved_documents
 
     def get_category_from_best_document(self, query_text):
