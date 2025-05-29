@@ -8,6 +8,9 @@ import "./glowButton.css";
 
 const nodeOrigin = [200, 20];
 
+const host = "ec2-18-218-177-90.us-east-2.compute.amazonaws.com";
+// const host = "localhost";
+
 const MessageList = ({
   className,
   messages,
@@ -74,9 +77,10 @@ export default function Home() {
   const [showSurvey, setShowSurvey] = useState(false);
   const [isCertified, setIsCertified] = useState(null); // yes or no
   const [experienceYears, setExperienceYears] = useState("");
-  const [glowActive, setGlowActive] = useState(true);
+  // const [glowActive, setGlowActive] = useState(true);
   const [certificationText, setCertificationText] = useState("");
   const [areaOfExpertise, setAreaOfExpertise] = useState("");
+  const [graphEnabled, setGraphEnabled] = useState(true);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -84,10 +88,10 @@ export default function Home() {
       textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
     }
   }, [chatMessage]);
-  useEffect(() => {
-    const timer = setTimeout(() => setGlowActive(false), 5000);
-    return () => clearTimeout(timer);
-  }, []);
+  // useEffect(() => {
+  //   const timer = setTimeout(() => setGlowActive(false), 5000);
+  //   return () => clearTimeout(timer);
+  // }, []);
   const updateGraphAndStreamResponse = async () => {
     if (!chatMessage.trim()) return;
     setLoading(true);
@@ -95,44 +99,50 @@ export default function Home() {
     setMessages((prev) => [...prev, { from: "user", text: userMessage }]);
     setChatMessage("");
 
-    try {
-      // First, update graph
-      const graphResponse = await fetch(
-        "http://127.0.0.1:5000/api/update_graph",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ category: userMessage }),
-        }
-      );
+    if (graphEnabled) {
+      try {
+        const graphResponse = await fetch(
+          "http://" + host + ":5000/api/update_graph",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              category: userMessage,
+              graph_enabled: graphEnabled,
+            }),
+          }
+        );
 
-      const graphData = await graphResponse.json();
-      updateGraph(graphData.nodes, graphData.edges);
+        const graphData = await graphResponse.json();
+        updateGraph(graphData.nodes, graphData.edges);
 
-      const userMsgIndex = messages.length;
-      const newGraph = {
-        nodes: graphData.nodes,
-        edges: graphData.edges,
-        message: "", // will be filled after streaming
-        userMessage: userMessage,
-        messageIndex: userMsgIndex,
-      };
-      setGraphHistory((prev) => [...prev, newGraph]);
-      setCurrentGraphIndex(graphHistory.length);
-    } catch (err) {
-      console.error("Error updating graph:", err);
-      setLoading(false);
-      return;
+        const userMsgIndex = messages.length;
+        const newGraph = {
+          nodes: graphData.nodes,
+          edges: graphData.edges,
+          message: "", // will be filled after streaming
+          userMessage: userMessage,
+          messageIndex: userMsgIndex,
+        };
+        setGraphHistory((prev) => [...prev, newGraph]);
+        setCurrentGraphIndex(graphHistory.length);
+      } catch (err) {
+        console.error("Error updating graph:", err);
+        setLoading(false);
+        return;
+      }
     }
 
-    // Then, stream assistant response
     try {
       const streamResponse = await fetch(
-        "http://127.0.0.1:5000/api/stream_response",
+        "http://" + host + ":5000/api/stream_response",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ category: userMessage }),
+          body: JSON.stringify({
+            category: userMessage,
+            graph_enabled: graphEnabled,
+          }),
         }
       );
 
@@ -338,7 +348,7 @@ export default function Home() {
                   experience_years: experienceYears,
                 };
 
-                fetch("http://127.0.0.1:5000/api/survey", {
+                fetch("http://" + host + ":5000/api/survey", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify(surveyData),
@@ -400,7 +410,7 @@ export default function Home() {
                       " Updated graph items sent to backend:",
                       item.nodes
                     );
-                    fetch("http://127.0.0.1:5000/api/set_current_graph", {
+                    fetch("http://" + host + ":5000/api/set_current_graph", {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({ nodes: item.nodes }),
@@ -436,6 +446,23 @@ export default function Home() {
 
       {/* Graph Display */}
       <div className="flex-grow relative">
+        {/* Toggle Button (Enable/Disable Graph Generation) */}
+        <div className="absolute top-4 right-4 z-50 flex items-center gap-3">
+          <span className="text-base font-semibold text-black dark:text-white">
+            Enable Graph
+          </span>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              className="sr-only peer"
+              checked={graphEnabled}
+              onChange={() => setGraphEnabled((prev) => !prev)}
+            />
+            <div className="w-11 h-6 bg-gray-300 dark:bg-gray-600 rounded-full peer peer-checked:bg-red-600 transition-colors duration-300" />
+            <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white dark:bg-gray-100 rounded-full shadow-md transform peer-checked:translate-x-full transition-transform duration-300" />
+          </label>
+        </div>
+
         <ReactFlow
           nodes={graph.nodes}
           edges={graph.edges}
