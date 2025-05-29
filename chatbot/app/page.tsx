@@ -8,8 +8,8 @@ import "./glowButton.css";
 
 const nodeOrigin = [200, 20];
 
-const host = "ec2-18-218-177-90.us-east-2.compute.amazonaws.com";
-// const host = "localhost";
+//const host = "ec2-18-218-177-90.us-east-2.compute.amazonaws.com";
+const host = "127.0.0.1";
 
 const MessageList = ({
   className,
@@ -20,13 +20,33 @@ const MessageList = ({
   messages: { from: string; text: string }[];
   messageRefs: React.RefObject<(HTMLDivElement | null)[]>;
 }) => {
-  const messageEndRef = useRef(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const messageEndRef = useRef<HTMLDivElement>(null);
+  const [isAutoScroll, setIsAutoScroll] = useState(true);
+
+  // Handle scroll to bottom based on flag
   useEffect(() => {
-    messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    if (isAutoScroll) {
+      messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, isAutoScroll]);
+
+  // Monitor scroll position
+  const handleScroll = () => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const isAtBottom =
+      container.scrollHeight - container.scrollTop <= container.clientHeight + 10;
+    setIsAutoScroll(isAtBottom);
+  };
 
   return (
-    <div className={`${className} text-white`}>
+    <div
+      className={`${className} text-white overflow-y-auto`}
+      ref={containerRef}
+      onScroll={handleScroll}
+    >
       {messages.length === 0 ? (
         <div className="text-gray-400 text-sm italic">
           Try asking:
@@ -43,7 +63,7 @@ const MessageList = ({
             ref={(el) => {
               messageRefs.current[idx] = el;
             }}
-            className={`rounded-lg p-4 shadow-md ${
+            className={`rounded-lg p-4 shadow-md mb-2 ${
               message.from === "user" ? "bg-[#FF0000]" : "bg-[#2A2A2A]"
             }`}
             style={{ color: "#FFFFFF" }}
