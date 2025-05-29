@@ -195,27 +195,22 @@ class BasicRAG:
         print(raw_verification)
         passed_verification = yes_before_no(raw_verification)
         if not passed_verification:
-            full_response = "I’m sorry, but I don’t have enough information to answer that accurately. Could you share a few more details?"
-            self.add_to_history("assistant", full_response)
-            yield full_response
-        else:
-            yield 
-            stream = self.chat.stream_general_response_call(
-                query=query,
-                documents=retrieved_docs,
-                user_profile=user_profile,
-                graph_str_raw=graph_str,
-                chat_history_text=self.format_chat_history()
-            )
-            # stream = self.generate_general_response(query, retrieved_docs, user_profile, 'Graph' if bucket == Bucket.GRAPH else 'General', graph_str_raw=graph_str)
+            print("⚠️ Model might hallucinate — proceeding anyway.")
 
-            full_response = ""
-            for chunk in stream:
-                full_response += chunk
-                yield chunk
+        stream = self.chat.stream_general_response_call(
+            query=query,
+            documents=retrieved_docs,
+            user_profile=user_profile,
+            graph_str_raw=graph_str,
+            chat_history_text=self.format_chat_history()
+        )
 
-            # print(full_response)
-            self.add_to_history("assistant", full_response)
+        full_response = ""
+        for chunk in stream:
+            full_response += chunk
+            yield chunk
+
+        self.add_to_history("assistant", full_response)
 
     def find_bucket(self, query: str):
         if self.chat_history and query in [self.chat_history[-1]['content'], self.chat_history[-2]['content']]:
