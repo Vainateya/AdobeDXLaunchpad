@@ -80,7 +80,7 @@ export default function Home() {
   // const [glowActive, setGlowActive] = useState(true);
   const [certificationText, setCertificationText] = useState("");
   const [areaOfExpertise, setAreaOfExpertise] = useState("");
-  const [graphEnabled, setGraphEnabled] = useState(true);
+  const [graphEnabled, setGraphEnabled] = useState(false);
 
   useEffect(() => {
     if (textareaRef.current) {
