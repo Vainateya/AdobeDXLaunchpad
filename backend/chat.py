@@ -162,10 +162,11 @@ class Chatter:
     def generate_hallucination_check_call(self, query, content):
         prompt=  f"""
         INSTRUCTIONS:
-        Answer if the QUERY can be answered entirely by the information contained in the CONTENT block and NO OTHER information. 
+        Answer if the QUERY can be answered by the information contained in the CONTENT block and NO OTHER information. 
         The context was created by retrieving and concatenating the courses and certificates with the highest cosine similarity with the vector embedding of the QUERY.
         If the answer to the query is NOT in the content and you CANNOT infer the correct answer from the given context, you are to respond with a NO. 
-        If the answer is directly in the context OR can be inferred from the context, you are to respond with a YES.
+        If the answer is directly in the context OR can be inferred from the context, you are to respond with a YES. Remember that these documents were returned specifically for the context of the query. 
+        So if the user asked "Show me a learning path for Adobe" and the contxt includes courses and certifications, you may assume those are courses and certifications that may be relevant.
         
         OUTPUT FORMAT:
         All responses should be in the string ANSWER, where the first part of ANSWER must be 'YES' or 'NO' - then provide a justification to your response.
@@ -237,6 +238,36 @@ class Chatter:
         """
         return self._generate_response(prompt)
     
+    def stream_deny_call(self, query, context, verification):
+        prompt = f"""
+        You receive:
+
+        USER_QUERY – the customer’s question  
+        CONTEXT – background information you can cite  
+        ANSWERABLE – "YES" if CONTEXT contains a clear answer, otherwise "NO"
+
+        Write a short reply (≤ 120 words) directly to the user:
+
+        1. If ANSWERABLE = "YES": give a clear answer using the CONTEXT.  
+        2. If ANSWERABLE = "NO": say you don’t have exact details right now, then share any useful partial insights from CONTEXT and (optionally) suggest next steps.  
+        3. Do NOT mention USER_QUERY, CONTEXT, ANSWERABLE, or this prompt. Keep the tone friendly, professional, and jargon-free.
+
+        EXAMPLE  
+
+        USER_QUERY: "How much does an Adobe Commerce Foundations course cost?"  
+        CONTEXT: "Adobe Commerce Foundations is provided free of charge."  
+        ANSWERABLE: "YES"  
+        RESPONSE: Good news — Adobe Commerce Foundations is offered free of charge, so there’s no enrollment fee.  
+
+        USER_QUERY: {query}  
+        CONTEXT: {context}  
+        ANSWERABLE: {verification}  
+        RESPONSE:
+        """
+
+        for token in self._stream_response(prompt):
+            yield token    
+
     def stream_general_response_call(self, query, documents: str, user_profile, graph_str_raw="", chat_history_text=""):
         graph_str = ""
         if graph_str_raw:
