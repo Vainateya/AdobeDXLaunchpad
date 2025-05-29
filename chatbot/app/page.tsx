@@ -77,6 +77,7 @@ export default function Home() {
   const [glowActive, setGlowActive] = useState(true);
   const [certificationText, setCertificationText] = useState("");
   const [areaOfExpertise, setAreaOfExpertise] = useState("");
+  const [graphEnabled, setGraphEnabled] = useState(true);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -94,61 +95,67 @@ export default function Home() {
     const userMessage = chatMessage;
     setMessages((prev) => [...prev, { from: "user", text: userMessage }]);
     setChatMessage("");
-
-    try {
-      // First, update graph
-      const graphResponse = await fetch(
-        "http://127.0.0.1:5000/api/update_graph",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ category: userMessage }),
-        }
-      );
-
-      const graphData = await graphResponse.json();
-      updateGraph(graphData.nodes, graphData.edges);
-
-      const userMsgIndex = messages.length;
-      const newGraph = {
-        nodes: graphData.nodes,
-        edges: graphData.edges,
-        message: "", // will be filled after streaming
-        userMessage: userMessage,
-        messageIndex: userMsgIndex,
-      };
-      setGraphHistory((prev) => [...prev, newGraph]);
-      setCurrentGraphIndex(graphHistory.length);
-    } catch (err) {
-      console.error("Error updating graph:", err);
-      setLoading(false);
-      return;
+  
+    if (graphEnabled) {
+      try {
+        const graphResponse = await fetch(
+          "http://127.0.0.1:5000/api/update_graph",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ 
+              category: userMessage,
+              graph_enabled: graphEnabled
+            }),
+          }
+        );
+  
+        const graphData = await graphResponse.json();
+        updateGraph(graphData.nodes, graphData.edges);
+  
+        const userMsgIndex = messages.length;
+        const newGraph = {
+          nodes: graphData.nodes,
+          edges: graphData.edges,
+          message: "", // will be filled after streaming
+          userMessage: userMessage,
+          messageIndex: userMsgIndex,
+        };
+        setGraphHistory((prev) => [...prev, newGraph]);
+        setCurrentGraphIndex(graphHistory.length);
+      } catch (err) {
+        console.error("Error updating graph:", err);
+        setLoading(false);
+        return;
+      }
     }
-
-    // Then, stream assistant response
+  
     try {
       const streamResponse = await fetch(
         "http://127.0.0.1:5000/api/stream_response",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ category: userMessage }),
+          body: JSON.stringify({ 
+            category: userMessage,
+            graph_enabled: graphEnabled
+          }),
         }
       );
-
+  
       const reader = streamResponse.body?.getReader();
       const decoder = new TextDecoder();
       let result = "";
-
+  
       const newMessage = { from: "api", text: "" };
       setMessages((prev) => [...prev, newMessage]);
-
+  
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
         result += chunk;
-
+  
         setMessages((prev) => {
           const updated = [...prev];
           updated[updated.length - 1] = {
@@ -158,13 +165,14 @@ export default function Home() {
           return updated;
         });
       }
-
+  
       setLoading(false);
     } catch (err) {
       console.error("Error streaming response:", err);
       setLoading(false);
     }
   };
+  
 
   const handleSendMessage = () => {
     updateGraphAndStreamResponse();
@@ -436,6 +444,23 @@ export default function Home() {
 
       {/* Graph Display */}
       <div className="flex-grow relative">
+      {/* Toggle Button (Enable/Disable Graph Generation) */}
+      <div className="absolute top-4 right-4 z-50 flex items-center gap-3">
+        <span className="text-base font-semibold text-black dark:text-white">
+          Enable Graph
+        </span>
+        <label className="relative inline-flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            className="sr-only peer"
+            checked={graphEnabled}
+            onChange={() => setGraphEnabled((prev) => !prev)}
+          />
+          <div className="w-11 h-6 bg-gray-300 dark:bg-gray-600 rounded-full peer peer-checked:bg-red-600 transition-colors duration-300" />
+          <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white dark:bg-gray-100 rounded-full shadow-md transform peer-checked:translate-x-full transition-transform duration-300" />
+        </label>
+      </div>
+
         <ReactFlow
           nodes={graph.nodes}
           edges={graph.edges}

@@ -122,6 +122,13 @@ def survey():
 def update_graph():
     data = request.get_json()
     query = data['category']
+    graph_enabled = data.get('graph_enabled', True)
+    if not graph_enabled:
+        return jsonify({
+            "nodes": [],
+            "edges": [],
+            "current_items": []
+        }), 200
     
     graph = rag.update_graph_state(query, courses, certificates, user_data)
 
@@ -149,10 +156,15 @@ def update_graph():
 def stream_response():
     data = request.get_json()
     query = data['category']
+    graph_enabled = data.get('graph_enabled', True)
 
     def generate():
+        if not graph_enabled:
+            rag.current_graph = []
+            rag.current_nx_graph = nx.DiGraph()
         for token in rag.run_rag_pipeline_stream(query, courses, certificates, user_data):
-            yield token
+            if token is not None:
+                yield token.encode("utf-8")
 
     return Response(generate(), mimetype='text/plain')
 
