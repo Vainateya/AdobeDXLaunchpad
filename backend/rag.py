@@ -31,6 +31,35 @@ def yes_before_no(text: str):
         return True         
     return i_yes < i_no
 
+def describe_graph_ops(ops: dict) -> str:
+    if "NO_CHANGE" in ops:
+        return "No changes were made to the learning pathway."
+
+    if "GO_BACK" in ops:
+        return f"Reverted the pathway to its state at step {ops['GO_BACK']}."
+
+    parts = []
+
+    if "OVERHAUL" in ops:
+        items = ", ".join(ops["OVERHAUL"])
+        return f"Replaced the existing pathway with: {items}."
+
+    if "ADD" in ops and ops["ADD"]:
+        added = ", ".join(ops["ADD"])
+        parts.append(f"Added {added}")
+
+    if "SUBTRACT" in ops and ops["SUBTRACT"]:
+        removed = ", ".join(ops["SUBTRACT"])
+        parts.append(f"removed {removed}")
+
+    sentence = " and ".join(parts)
+    if not sentence:
+        sentence = "No meaningful changes were specified."
+    else:
+        sentence = sentence[0].upper() + sentence[1:] + "."
+
+    return sentence
+
 def extract_dict_from_string(s: str):
     pattern = re.compile(r'\{.*?\}', re.DOTALL)
     matches = pattern.finditer(s)
@@ -65,13 +94,28 @@ class BasicRAG:
         self.current_nx_graph = nx.DiGraph()
         self.title2doc = {d['metadata']['title']: d for d in self.document_store.get_all_documents()}
         self.temperature = 0
+        self.graph_enabled = True
+        self.resource_info = ""
+        self.graph_ops = ""
 
-    def format_docs_context(self, docs):
+    def format_docs_context_html(self, docs):
         return "\n\n".join(
             [
                 f"<h3>{doc['metadata']['title']}</h3> <p><strong>THIS IS A {doc['metadata']['type'].upper()}</strong></p>" +
                 "".join(
                     f"<p><strong>{key.replace('_', ' ').title()}:</strong> {value}</p>"
+                    for key, value in doc['metadata'].items() if key != "title"
+                )
+                for doc in docs
+            ]
+        )
+
+    def format_docs_context(self, docs):
+        return "\n\n".join(
+            [
+                f"Name: {doc['metadata']['title']}. This is a {doc['metadata']['type'].upper()}." +
+                "".join(
+                    f"{key.replace('_', ' ').title()}: {value}. "
                     for key, value in doc['metadata'].items() if key != "title"
                 )
                 for doc in docs
@@ -127,21 +171,23 @@ class BasicRAG:
                 chat_history_text += f"Assistant previously said: {entry['content']}\n"
         return chat_history_text
 
-    def update_graph_state(self, query, courses, certificates, user_profile):
+    def update_graph_state(self, query, courses, certificates, user_profile, top_k=8):
         bucket = self.find_bucket(query)
         if bucket == Bucket.IRRELEVANT:
             return self.current_nx_graph
     
         rag_query = 'Current resources in graph: ' + ', '.join("'" + name + "'" for name in self.current_graph) + " User Query: " + query
 
-        retrieved_docs = self.retrieve_documents(rag_query, top_k=5, exclude_supplement=True)[1]
+        retrieved_docs = self.retrieve_documents(rag_query, top_k=top_k, exclude_supplement=True)[1]
         retrieved_docs.extend(
-            self.retrieve_documents(query, top_k=5, exclude_supplement=True, omit_titles=[d['metadata']['title'] for d in retrieved_docs])[1]
+            self.retrieve_documents(query, top_k=top_k, exclude_supplement=True, omit_titles=[d['metadata']['title'] for d in retrieved_docs])[1]
         )
+
         current_docs = [self.title2doc[g] for g in self.current_graph if g in self.current_graph and 'Study Materials' not in g] + retrieved_docs
         resource_info = self.format_docs_context(current_docs)
-        print("retrieved_docs")
-        pprint(retrieved_docs)
+        self.resource_info = resource_info
+        # print("retrieved_docs")
+        # pprint(retrieved_docs)
 
         raw_graph_ops = self.chat.generate_graph_call(
             query=query, 
@@ -151,8 +197,9 @@ class BasicRAG:
             user_profile=user_profile, 
             chat_history_text=self.format_chat_history()
         )
+
         # raw_graph_ops = self.generate_new_graph(query, str(self.current_graph), self.format_past_graphs(self.past_graphs), resource_info, user_profile=user_profile)
-        pprint(raw_graph_ops)
+        print("key", [key for key in current_docs])
         graph_ops = extract_dict_from_string(raw_graph_ops)
 
         if 'ADD' in graph_ops:
@@ -164,11 +211,17 @@ class BasicRAG:
         if 'GO_BACK' in graph_ops:
             self.current_graph = self.past_graphs[int(graph_ops['GO_BACK'])][1]
 
+        print("raw_graph_ops", raw_graph_ops, self.current_graph)
+        self.graph_ops = graph_ops
+
+        current_docs = [self.title2doc[g] for g in self.current_graph if g in self.current_graph and 'Study Materials' not in g]
+        self.resource_info = self.format_docs_context(current_docs)
+
         self.current_nx_graph = self.retrieve_graph(courses, certificates, self.current_graph)
         self.past_graphs.append((query, self.current_graph))
         return self.current_nx_graph
 
-    def run_rag_pipeline_stream(self, query: str, courses, certificates, user_profile, top_k: int = 5):
+    def run_rag_pipeline_stream(self, query: str, courses, certificates, user_profile, top_k: int = 4):
         """
         Runs the RAG pipeline and yields assistant response tokens as a stream.
         This version is designed for use in Flask streaming endpoints.
@@ -181,29 +234,39 @@ class BasicRAG:
             return
 
         self.add_to_history("user", query)
-        if len(self.current_graph) > 0:
+        if len(self.current_graph) > 0 and self.graph_enabled:
             _, e = graph_to_2d_array(self.current_nx_graph)
             graph_str = display_edges(e)
+            print("graph_str", graph_str, self.current_graph)
         else:
             graph_str = ""
 
-        retrieved_docs = self.retrieve_documents(query, top_k)[1]
+        if not self.resource_info:
+            retrieved_docs = self.retrieve_documents(query, top_k)[1]
+            resource_info = self.format_docs_context_html(retrieved_docs)
+        else:
+            resource_info = self.resource_info
+            self.resource_info = ""
+
         raw_verification = self.chat.generate_hallucination_check_call(
             query=query, 
-            content=self.format_docs_context(retrieved_docs) + self.format_chat_history()
+            content=resource_info + self.format_chat_history(),
+            graphops=describe_graph_ops(self.graph_ops)
         )
+        self.graph_ops = ""
         print(raw_verification)
+        
         passed_verification = yes_before_no(raw_verification)
         if not passed_verification:
             stream = self.chat.stream_deny_call(
                 query=query,
-                context=self.format_docs_context(retrieved_docs) + self.format_chat_history(),
+                context=resource_info + self.format_chat_history(),
                 verification=passed_verification,
             )
         else:
             stream = self.chat.stream_general_response_call(
                 query=query,
-                documents=retrieved_docs,
+                documents=resource_info,
                 user_profile=user_profile,
                 graph_str_raw=graph_str,
                 chat_history_text=self.format_chat_history()

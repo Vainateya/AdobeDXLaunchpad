@@ -157,11 +157,11 @@ def stream_response():
     data = request.get_json()
     query = data['category']
     graph_enabled = data.get('graph_enabled', True)
+    print("graph_enabled", graph_enabled)
 
     def generate():
-        if not graph_enabled:
-            rag.current_graph = []
-            rag.current_nx_graph = nx.DiGraph()
+        rag.graph_enabled = graph_enabled
+        
         for token in rag.run_rag_pipeline_stream(query, courses, certificates, user_data):
             if token is not None:
                 yield token.encode("utf-8")

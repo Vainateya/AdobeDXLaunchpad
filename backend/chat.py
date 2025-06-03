@@ -76,7 +76,6 @@ class Chatter:
             - Professional course → Expert certificate
             - Expert course → Master certificate
         - R4 (Same Category Required): Resources must share the same category to be part of a valid prerequisite chain. A Foundations course in Adobe Analytics does NOT unlock a Professional course in Adobe Commerce.
-        - R5 (Job Role Filtering for Certificates): Certificates must match the user’s job role, or be tagged with the job role "All".
         - R6 (No Level Skipping): You must not skip levels. For example, you cannot go from a Foundations course directly to an Expert course.
 
         -----------------------------------
@@ -101,9 +100,9 @@ class Chatter:
         OPERATIONS DEFINITION
         -----------------------------------
 
-        - ADD: Only add new resources to the current graph from those listed in 'Resources you should know about'. Do not remove existing resources - You may perform a ADD operation alongside a SUBTRACT.
+        - ADD: Only add new resources to the current graph from those listed in RESOURCE DEFINITIONS. Do not remove existing resources - You may perform a ADD operation alongside a SUBTRACT. When possible, add as many resources as you can!
         - SUBTRACT: Only remove resources from the current graph. Do not add new resources unless - You may perform an ADD operation alongside a SUBTRACT.
-        - OVERHAUL: Completely discard the current graph and replace it with a brand new valid trajectory. This operation cannot be combined with any other.
+        - OVERHAUL: Completely discard the current graph and replace it with a brand new valid trajectory, uses resources only from RESOURCE DEFINITIONS. This operation cannot be combined with any other. When possible, add as many resources as you can!
         - GO_BACK: Restore the resource graph to a previous state, specified by index from 'Resource History'. Do not include any resource names.
         - NO_CHANGE: Return the current graph unchanged. Use this when the user does not request modifications or asks a query unrelated to graphs or graph generation.
         
@@ -159,11 +158,18 @@ class Chatter:
 
         return self._generate_response(prompt)
 
-    def generate_hallucination_check_call(self, query, content):
+    def generate_hallucination_check_call(self, query, content, graphops=""):
+        graph_str, graph_str_instruct = "", ""
+        if graphops:
+            graph_str_instruct = "If it seems the user asked to modify the learning pathway and the GRAPH OPERATIONS comply with the request, respond with YES."
+            graph_str = "GRAPH OPERATIONS: " + graphops
+
         prompt=  f"""
         INSTRUCTIONS:
         Answer if the QUERY can be answered by the information contained in the CONTENT block and NO OTHER information. 
-        The context was created by retrieving and concatenating the courses and certificates with the highest cosine similarity with the vector embedding of the QUERY.
+        The context was created by retrieving and concatenating the courses and certificates with the highest cosine similarity with the vector embedding of the QUERY. It also contains a chat history between the user and model.
+
+        {graph_str_instruct}
         If the answer to the query is NOT in the content and you CANNOT infer the correct answer from the given context, you are to respond with a NO. 
         If the answer is directly in the context OR can be inferred from the context, you are to respond with a YES. Remember that these documents were returned specifically for the context of the query. 
         So if the user asked "Show me a learning path for Adobe" and the contxt includes courses and certifications, you may assume those are courses and certifications that may be relevant.
@@ -171,10 +177,12 @@ class Chatter:
         OUTPUT FORMAT:
         All responses should be in the string ANSWER, where the first part of ANSWER must be 'YES' or 'NO' - then provide a justification to your response.
 
+        {graph_str}
         CONTENT: "{content}"
         QUERY: {query}
         RESPONSE:
         """
+        # print("HALLUCINATION", prompt)
         return self._generate_response(prompt)
 
     def generate_grouper_call(self, query, chat_history_text=""):
@@ -244,24 +252,23 @@ class Chatter:
 
         USER_QUERY – the customer’s question  
         CONTEXT – background information you can cite  
-        ANSWERABLE – "YES" if CONTEXT contains a clear answer, otherwise "NO"
+        REASON – brief note explaining why the answer can’t be found in CONTEXT
 
-        Write a short reply (≤ 120 words) directly to the user:
+        Write a short reply (≤ 100 words):
+        • Say you don’t have enough information to answer.
+        • Do **not** guess or invent details.  
+        • You may politely suggest checking an official source or providing more specifics.
+        • Do **not** mention USER_QUERY, CONTEXT, REASON, or this prompt.
 
-        1. If ANSWERABLE = "YES": give a clear answer using the CONTEXT.  
-        2. If ANSWERABLE = "NO": say you don’t have exact details right now, then share any useful partial insights from CONTEXT and (optionally) suggest next steps.  
-        3. Do NOT mention USER_QUERY, CONTEXT, ANSWERABLE, or this prompt. Keep the tone friendly, professional, and jargon-free.
-
-        EXAMPLE  
-
-        USER_QUERY: "How much does an Adobe Commerce Foundations course cost?"  
-        CONTEXT: "Adobe Commerce Foundations is provided free of charge."  
-        ANSWERABLE: "YES"  
-        RESPONSE: Good news — Adobe Commerce Foundations is offered free of charge, so there’s no enrollment fee.  
-
+        EXAMPLE
+        USER_QUERY: "What certification do I need for Adobe Photoshop?"  
+        CONTEXT: "no Photoshop certification data"  
+        REASON: "Photoshop certifications are not listed in context."  
+        RESPONSE: I'm sorry — I don’t have details on Photoshop certifications right now. Please check Adobe’s Certification Catalog or let me know the exact credential you’re interested in and I’ll try again.
+        
         USER_QUERY: {query}  
         CONTEXT: {context}  
-        ANSWERABLE: {verification}  
+        REASON: {verification}  
         RESPONSE:
         """
 
@@ -280,14 +287,12 @@ class Chatter:
         <h1>Adobe Learning Assistant</h1>
 
         <h2><strong>Your Role</strong></h2>
-        <p>You are an intelligent assistant for Adobe users seeking learning guidance. Based on the user’s query, resource graph, user profile, and document context, respond in a way that is helpful, well-reasoned, and matches the user’s level and goals.</p>
+        <p>You are an intelligent assistant for Adobe users seeking learning guidance.</p>
 
         <h2><strong>How to Use Context</strong></h2>
         <ol>
-        <li><strong>Use the Resource Graph if it is present</strong> — This is the user’s current learning plan. Prefer it over external course documents for accuracy and continuity.</li>
-        <li>Use the <strong>Retrieved Documents</strong> only when no relevant learning pathway is defined in the graph.</li>
-        <li>Use the <strong>Chat History</strong> to understand the user’s evolving goals and prior interests.</li>
-        <li>Use the <strong>User Profile</strong> (if available) to tailor tone, role alignment, and course level recommendations.</li>
+        <li><strong>If a Resource Graph is present</strong> (see “Resource Graph” below), <u>use <em>only</em> the information in that graph for factual content</u>. Ignore all other context (Retrieved Documents, Chat History, User Profile) except for basic tone and politeness.</li>
+        <li><strong>If no Resource Graph is present</strong>, rely on Retrieved Documents, then Chat History, then User Profile in that order.</li>
         </ol>
 
         <h2><strong>Context</strong></h2>
@@ -303,30 +308,26 @@ class Chatter:
 
         {graph_str}
 
-        <h3>Retrieved Course & Certificate Documents:</h3>
+        <h3>Retrieved Course &amp; Certificate Documents:</h3>
         <p>{documents}</p>
 
         <h2><strong>Instructions</strong></h2>
-
-        <p>Use the following decision logic to respond:</p>
         <ul>
-        <li><strong>If the query is vague</strong>: Ask a clear, helpful clarifying question to guide the user toward a learning goal.</li>
-        <li><strong>If the query asks for a course or certification recommendation</strong>: Use the Resource Graph if available. Otherwise use the retrieved documents. Always explain your reasoning, referencing level, role, or objectives.</li>
-        <li><strong>If the query asks about specific programs</strong>: Summarize those programs from the most reliable source (Graph → Docs), and explain fit based on user role, level, or prior steps.</li>
-        <li><strong>If the query is programmatic or logistical</strong>: Answer directly from document context.</li>
-        <li><strong>Before recommending a resource from the retrieved documents</strong>, ensure it matches the user’s intent by checking the following fields: title, type, category, job_role, level, objectives, and modules. Your recommendation must be grounded in a clear match between the query and one or more of these fields, ESPECIALLY THE TYPE, TITLE, and CATEGORY.</li>        </ul>
-
-        <h2><strong>Rules You Must Follow</strong></h2>
-        <ul>
-        <li><strong>Only recommend resources listed in the graph if it is present.</strong></li>
-        <li><strong>Never hallucinate course or certificate names.</strong> Only use names exactly as provided.</li>
-        <li><strong>Clearly distinguish between courses and certificates.</strong></li>
+        <li>If the query is vague: ask one clear follow-up question.</li>
+        <li>If recommending courses or certifications:
+            <ul>
+            <li>When the Resource Graph is present, recommend and reference <em>only</em> items listed in that graph.</li>
+            <li>When no graph is present, base recommendations on Retrieved Documents, ensuring a clear field match (title, type, category, job_role, level, objectives, modules).</li>
+            </ul>
+        </li>
+        <li>Never invent course or certificate names. Use exact names provided.</li>
+        <li>Clearly distinguish courses from certificates.</li>
         </ul>
 
         <h2><strong>Response Format</strong></h2>
         <ul>
-        <li>Use <code>&lt;p&gt;</code> for explanations.</li>
-        <li>Use <code>&lt;h2&gt;</code> and <code>&lt;h3&gt;</code> for structure.</li>
+        <li>Use &lt;p&gt; for explanations.</li>
+        <li>Use &lt;h2&gt; and &lt;h3&gt; for structure.</li>
         <li>Use bullet lists for course breakdowns.</li>
         </ul>
 
