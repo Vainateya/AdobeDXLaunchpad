@@ -101,6 +101,13 @@ export default function Home() {
   const [certificationText, setCertificationText] = useState("");
   const [areaOfExpertise, setAreaOfExpertise] = useState("");
   const [graphEnabled, setGraphEnabled] = useState(false);
+  const questionPrompts = [
+    "Tell me about Adobe's ",
+    "What does Adobe offer in ",
+    "Which certification should I get for ",
+    "What courses are best for learning ",
+  ];  
+  const [showPrompts, setShowPrompts] = useState(false);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -322,7 +329,7 @@ export default function Home() {
                     className="w-full px-4 py-2 border border-gray-300 rounded bg-white text-black"
                     value={certificationText}
                     onChange={(e) => setCertificationText(e.target.value)}
-                    placeholder="e.g., Adobe Analytics 1043, Campaign 1060"
+                    placeholder="e.g., Adobe Commerce Foundations, etc."
                   />
                 </div>
               )}
@@ -331,14 +338,14 @@ export default function Home() {
             {/* Question 2 */}
             <div className="mb-4">
               <label className="block text-sm font-medium mb-2">
-                2. Area of expertise:
+                2. Solution of interest:
               </label>
               <input
                 type="text"
                 className="w-full px-4 py-2 border border-gray-300 rounded bg-white text-black"
                 value={areaOfExpertise}
                 onChange={(e) => setAreaOfExpertise(e.target.value)}
-                placeholder="e.g., Adobe Analytics 1043, Campaign 1060"
+                placeholder="e.g., Analytics, Commerce, etc."
               />
             </div>
 
@@ -578,6 +585,9 @@ export default function Home() {
           <p className="text-2xl font-bold text-white">Adobe Chat</p>
         </div>
 
+
+
+
         <MessageList
           className="flex-grow overflow-y-auto p-2"
           messages={messages}
@@ -589,6 +599,29 @@ export default function Home() {
             <PulseLoader color="#FF0000" />
           </div>
         )}
+        {/* Quick Prompts Toggle Box */}
+        <div className="mt-2 mb-4">
+          <button
+            className="text-sm text-white bg-[#333] hover:bg-[#444] px-4 py-2 rounded-lg mb-2 shadow-md"
+            onClick={() => setShowPrompts((prev) => !prev)}
+          >
+            {showPrompts ? "Hide Quick Prompts" : "Show Quick Prompts"}
+          </button>
+
+          {showPrompts && (
+            <div className="flex flex-col gap-3 mt-2">
+              {questionPrompts.map((prompt, idx) => (
+                <button
+                  key={idx}
+                  className="bg-red-500/20 backdrop-blur-md text-white px-4 py-3 rounded-lg text-base text-left shadow-md border border-red-400 hover:bg-red-500/30 transition duration-200"
+                  onClick={() => setChatMessage(prompt)}
+                >
+                  {prompt}...
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         <div className="flex gap-2 mt-4">
           <textarea
