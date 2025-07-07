@@ -11,6 +11,8 @@ const nodeOrigin = [200, 20];
 //const host = "ec2-18-218-177-90.us-east-2.compute.amazonaws.com";
 const host = "127.0.0.1";
 
+const character_limit = 140;
+
 const MessageList = ({
   className,
   messages,
@@ -124,7 +126,7 @@ export default function Home() {
     setLoading(true);
     const userMessage = chatMessage;
     setMessages((prev) => [...prev, { from: "user", text: userMessage }]);
-    setChatMessage("");
+    setLengthRestrictedChatMessage("");
 
     if (graphEnabled) {
       try {
@@ -202,6 +204,12 @@ export default function Home() {
       setLoading(false);
     }
   };
+
+  const setLengthRestrictedChatMessage = (message: string) => {
+    if (message.length <= character_limit) {
+      setChatMessage(message);
+    }
+  }
 
   const handleSendMessage = () => {
     updateGraphAndStreamResponse();
@@ -614,7 +622,7 @@ export default function Home() {
                 <button
                   key={idx}
                   className="bg-red-500/20 backdrop-blur-md text-white px-4 py-3 rounded-lg text-base text-left shadow-md border border-red-400 hover:bg-red-500/30 transition duration-200"
-                  onClick={() => setChatMessage(prompt)}
+                  onClick={() => setLengthRestrictedChatMessage(prompt)}
                 >
                   {prompt}...
                 </button>
@@ -623,27 +631,30 @@ export default function Home() {
           )}
         </div>
 
-        <div className="flex gap-2 mt-4">
-          <textarea
-            className="border p-3 w-full resize-none rounded-lg shadow-xl text-black bg-white text-lg placeholder-gray-500"
-            ref={textareaRef}
-            value={chatMessage}
-            placeholder="Type your question here..."
-            onChange={(e) => setChatMessage(e.target.value)}
-            onKeyDown={handleKeyDown}
-            style={{ overflowY: "hidden", resize: "none" }}
-          />
-          <button
-            className={`text-white font-medium text-lg px-5 py-3 transition-all rounded-lg ${
-              loading
-                ? "bg-gray-500 cursor-not-allowed"
-                : "bg-[#FF0000] hover:bg-red-700"
-            }`}
-            onClick={handleSendMessage}
-            disabled={loading}
-          >
-            {loading ? "..." : "➤"}
-          </button>
+        <div>
+          <div className="flex gap-2 mt-4">
+            <textarea
+              className="border p-3 w-full resize-none rounded-lg shadow-xl text-black bg-white text-lg placeholder-gray-500"
+              ref={textareaRef}
+              value={chatMessage}
+              placeholder="Type your question here..."
+              onChange={(e) => setLengthRestrictedChatMessage(e.target.value)}
+              onKeyDown={handleKeyDown}
+              style={{ overflowY: "hidden", resize: "none" }}
+            />
+            <button
+              className={`text-white font-medium text-lg px-5 py-3 transition-all rounded-lg ${
+                loading
+                  ? "bg-gray-500 cursor-not-allowed"
+                  : "bg-[#FF0000] hover:bg-red-700"
+              }`}
+              onClick={handleSendMessage}
+              disabled={loading}
+            >
+              {loading ? "..." : "➤"}
+            </button>
+          </div>
+          <p className={`text-sm mt-1 ml-1 ${chatMessage.length == character_limit ? "text-red-500" : ""}`}>{chatMessage.length}/{character_limit}</p>
         </div>
       </div>
       <button
