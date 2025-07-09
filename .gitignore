@@ -3,6 +3,7 @@ dependency_graph/.env
 **/__pycache__/**
 .venv/*
 key.txt
+.env
 
 */pickels/*
 */supplement_docs/*

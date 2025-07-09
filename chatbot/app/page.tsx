@@ -39,7 +39,8 @@ const MessageList = ({
     if (!container) return;
 
     const isAtBottom =
-      container.scrollHeight - container.scrollTop <= container.clientHeight + 10;
+      container.scrollHeight - container.scrollTop <=
+      container.clientHeight + 10;
     setIsAutoScroll(isAtBottom);
   };
 
@@ -50,14 +51,16 @@ const MessageList = ({
       onScroll={handleScroll}
     >
       {messages.length === 0 ? (
-        <div className="text-gray-400 text-sm italic">
-          Try asking:
-          <ul className="list-disc ml-4 mt-2">
-            <li>📌 &quot;What Adobe courses should I take?&quot;</li>
-            <li>📌 &quot;Show me a learning path for Adobe Analytics.&quot;</li>
-            <li>📌 &quot;How do I become an Adobe Certified Expert?&quot;</li>
-          </ul>
-        </div>
+        <>
+          <div className="text-gray-400 text-sm italic">
+            Try asking:
+            <ul className="list-disc ml-4 mt-2">
+              <li>What Adobe courses should I take?</li>
+              <li>Show me a learning path for Adobe Analytics.</li>
+              <li>How do I become an Adobe Certified Expert?</li>
+            </ul>
+          </div>
+        </>
       ) : (
         messages.map((message, idx) => (
           <div
@@ -108,8 +111,31 @@ export default function Home() {
     "What does Adobe offer in ",
     "Which certification should I get for ",
     "What courses are best for learning ",
-  ];  
+  ];
   const [showPrompts, setShowPrompts] = useState(false);
+  const [allResourceNames, setAllResourceNames] = useState<string[]>([]);
+  const [allCategories, setAllCategories] = useState<string[]>([]);
+  const [selectedCerts, setSelectedCerts] = useState<string[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const [customCategory, setCustomCategory] = useState<string>("");
+
+  useEffect(() => {
+    // Fetch resources.json to get all course/cert names and categories
+    fetch("/resources.json")
+      .then((res) => res.json())
+      .then((data) => {
+        const names = Object.keys(data);
+        setAllResourceNames(names);
+        const categories = Array.from(
+          new Set(Object.values(data).map((item: any) => item.category))
+        );
+        setAllCategories(categories);
+      })
+      .catch(() => {
+        setAllResourceNames([]);
+        setAllCategories([]);
+      });
+  }, []);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -127,40 +153,6 @@ export default function Home() {
     const userMessage = chatMessage;
     setMessages((prev) => [...prev, { from: "user", text: userMessage }]);
     setLengthRestrictedChatMessage("");
-
-    if (graphEnabled) {
-      try {
-        const graphResponse = await fetch(
-          "http://" + host + ":5000/api/update_graph",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              category: userMessage,
-              graph_enabled: graphEnabled,
-            }),
-          }
-        );
-
-        const graphData = await graphResponse.json();
-        updateGraph(graphData.nodes, graphData.edges);
-
-        const userMsgIndex = messages.length;
-        const newGraph = {
-          nodes: graphData.nodes,
-          edges: graphData.edges,
-          message: "", // will be filled after streaming
-          userMessage: userMessage,
-          messageIndex: userMsgIndex,
-        };
-        setGraphHistory((prev) => [...prev, newGraph]);
-        setCurrentGraphIndex(graphHistory.length);
-      } catch (err) {
-        console.error("Error updating graph:", err);
-        setLoading(false);
-        return;
-      }
-    }
 
     try {
       const streamResponse = await fetch(
@@ -198,6 +190,43 @@ export default function Home() {
         });
       }
 
+      // Now that streaming is complete, generate the graph if enabled
+      if (graphEnabled) {
+        try {
+          console.log("Generating graph after response completion...");
+          const graphResponse = await fetch(
+            "http://" + host + ":5000/api/get_graph_from_response",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({}), // No body needed
+            }
+          );
+
+          const graphData = await graphResponse.json();
+          console.log("Graph response:", graphData);
+
+          if (graphData.nodes && graphData.nodes.length > 0) {
+            updateGraph(graphData.nodes, graphData.edges);
+
+            const userMsgIndex = messages.length;
+            const newGraph = {
+              nodes: graphData.nodes,
+              edges: graphData.edges,
+              message: graphData.message || "",
+              userMessage: userMessage,
+              messageIndex: userMsgIndex,
+            };
+            setGraphHistory((prev) => [...prev, newGraph]);
+            setCurrentGraphIndex(graphHistory.length);
+          } else {
+            console.log("No graph generated:", graphData.message);
+          }
+        } catch (err) {
+          console.error("Error generating graph:", err);
+        }
+      }
+
       setLoading(false);
     } catch (err) {
       console.error("Error streaming response:", err);
@@ -209,7 +238,7 @@ export default function Home() {
     if (message.length <= character_limit) {
       setChatMessage(message);
     }
-  }
+  };
 
   const handleSendMessage = () => {
     updateGraphAndStreamResponse();
@@ -279,7 +308,7 @@ export default function Home() {
           onClick={() => setShowHistory(true)}
           className="absolute top-10 left-4 bg-[#EB1000] hover:bg-red-700 text-white font-semibold py-2 px-4 rounded shadow-lg z-50"
         >
-          History
+          Graph History
         </button>
       )}
       {/* Bottom-left Survey Button */}
@@ -304,43 +333,49 @@ export default function Home() {
             {/* Question 1 */}
             <div className="mb-4">
               <label className="block text-sm font-medium mb-2">
-                1. Do you already have an Adobe certification or have you
-                already done an Adobe course?
+                1. What Adobe course or certification(s) did you do?
               </label>
-              <div className="flex gap-4">
-                <button
-                  className={`px-4 py-2 rounded ${
-                    isCertified === "yes" ? "bg-[#EB1000]" : "bg-[#333]"
-                  }`}
-                  onClick={() => setIsCertified("yes")}
-                >
-                  Yes
-                </button>
-                <button
-                  className={`px-4 py-2 rounded ${
-                    isCertified === "no" ? "bg-[#EB1000]" : "bg-[#333]"
-                  }`}
-                  onClick={() => setIsCertified("no")}
-                >
-                  No
-                </button>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {selectedCerts.map((cert) => (
+                  <span
+                    key={cert}
+                    className="bg-red-600 text-white px-2 py-1 rounded flex items-center"
+                  >
+                    {cert}
+                    <button
+                      className="ml-2 text-white hover:text-gray-200"
+                      onClick={() =>
+                        setSelectedCerts(
+                          selectedCerts.filter((c) => c !== cert)
+                        )
+                      }
+                      aria-label={`Remove ${cert}`}
+                      type="button"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
               </div>
-
-              {/* Follow-up question */}
-              {isCertified === "yes" && (
-                <div className="mt-4">
-                  <label className="block text-sm font-medium mb-2">
-                    What Adobe course or certification(s) did you do?
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full px-4 py-2 border border-gray-300 rounded bg-white text-black"
-                    value={certificationText}
-                    onChange={(e) => setCertificationText(e.target.value)}
-                    placeholder="e.g., Adobe Commerce Foundations, etc."
-                  />
-                </div>
-              )}
+              <select
+                className="w-full px-4 py-2 border border-gray-300 rounded bg-white text-black"
+                value=""
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value && !selectedCerts.includes(value)) {
+                    setSelectedCerts([...selectedCerts, value]);
+                  }
+                }}
+              >
+                <option value="">Select a course or certification...</option>
+                {allResourceNames
+                  .filter((name) => !selectedCerts.includes(name))
+                  .map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+              </select>
             </div>
 
             {/* Question 2 */}
@@ -348,16 +383,35 @@ export default function Home() {
               <label className="block text-sm font-medium mb-2">
                 2. Solution of interest:
               </label>
-              <input
-                type="text"
+              <select
                 className="w-full px-4 py-2 border border-gray-300 rounded bg-white text-black"
-                value={areaOfExpertise}
-                onChange={(e) => setAreaOfExpertise(e.target.value)}
-                placeholder="e.g., Analytics, Commerce, etc."
-              />
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+              >
+                <option value="">Select a category</option>
+                {allCategories.length === 0 ? (
+                  <option disabled>No categories found</option>
+                ) : (
+                  allCategories.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))
+                )}
+                <option value="Other">Other</option>
+              </select>
+              {selectedCategory === "Other" && (
+                <input
+                  type="text"
+                  className="w-full px-4 py-2 border border-gray-300 rounded bg-white text-black mt-2"
+                  value={customCategory}
+                  onChange={(e) => setCustomCategory(e.target.value)}
+                  placeholder="Enter your solution of interest"
+                />
+              )}
             </div>
 
-            {/* Question 2 */}
+            {/* Question 3 */}
             <div className="mb-4">
               <label className="block text-sm font-medium mb-2">
                 3. Years of experience in your field:
@@ -377,9 +431,11 @@ export default function Home() {
               className="mt-2 bg-[#EB1000] hover:bg-red-700 text-white px-4 py-2 rounded"
               onClick={() => {
                 const surveyData = {
-                  certified: isCertified,
-                  certifications: certificationText,
-                  expertise: areaOfExpertise,
+                  certifications: selectedCerts,
+                  expertise:
+                    selectedCategory === "Other"
+                      ? customCategory
+                      : selectedCategory,
                   experience_years: experienceYears,
                 };
 
@@ -593,14 +649,39 @@ export default function Home() {
           <p className="text-2xl font-bold text-white">Adobe Chat</p>
         </div>
 
-
-
-
-        <MessageList
-          className="flex-grow overflow-y-auto p-2"
-          messages={messages}
-          messageRefs={messageRefs}
-        />
+        {/* Scrollable chat area including instructions and messages */}
+        <div className="flex-grow overflow-y-auto">
+          <div className="mb-4 p-4 bg-[#222] rounded-lg text-white text-sm shadow">
+            <strong>Welcome!</strong>
+            <p>
+              This is an AI-powered Adobe learning and certification assistant.
+              Ask questions about Adobe courses, certifications, and learning
+              paths. The tool uses advanced AI to find the most relevant
+              resources and can visualize learning pathways as interactive
+              graphs.
+            </p>
+            <ul className="list-disc ml-5 mt-2">
+              <li>
+                <b>Best for:</b> Exploring Adobe certifications, finding course
+                prerequisites, and planning your learning journey.
+              </li>
+              <li>
+                <b>Not for:</b> Real-time exam registration, official Adobe
+                support, or non-Adobe topics.
+              </li>
+              <li>
+                <b>Interface tips:</b> Toggle the graph for visual learning
+                paths. Use “Answer a few questions” to get personalized
+                recommendations.
+              </li>
+            </ul>
+          </div>
+          <MessageList
+            className="flex-grow overflow-y-auto p-2"
+            messages={messages}
+            messageRefs={messageRefs}
+          />
+        </div>
 
         {loading && (
           <div className="flex justify-center my-2">
@@ -654,7 +735,13 @@ export default function Home() {
               {loading ? "..." : "➤"}
             </button>
           </div>
-          <p className={`text-sm mt-1 ml-1 ${chatMessage.length == character_limit ? "text-red-500" : ""}`}>{chatMessage.length}/{character_limit}</p>
+          <p
+            className={`text-sm mt-1 ml-1 ${
+              chatMessage.length == character_limit ? "text-red-500" : ""
+            }`}
+          >
+            {chatMessage.length}/{character_limit}
+          </p>
         </div>
       </div>
       <button

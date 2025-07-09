@@ -76,6 +76,24 @@ else:
         certificates = load_sources_pickle(certificates_save_location)
         courses = load_sources_pickle(courses_save_location)
 
+        outs = {}
+        for c in certificates:
+            d = c.to_dict()
+            t = d['display']
+            del d['display']
+
+            outs[t] = d
+    
+        for c in courses:
+            d = c.to_dict()
+            t = d['display']
+            del d['display']
+
+            outs[t] = d
+        
+        with open(f'resources.json', 'w') as file:
+            json.dump(outs, file, indent=4)
+
 with open(f'{save_folder}/config.json', 'w') as file:
     json.dump(data, file, indent=4)
 user_data = {}

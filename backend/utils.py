@@ -107,7 +107,7 @@ class Course(Source):
         time          = self._clean(row_values["Time"])          if "Time"          in row_values else "None"
         num_modules   = int(self._clean(row_values["Modules"]))  if "Modules"       in row_values else "None"
 
-        print("application", application)
+        # print("application", application)
 
         if job_role and job_role != 'All':
             job_role = job_role[:-1]
@@ -115,12 +115,14 @@ class Course(Source):
         display = soup.find('h1', class_='text-white').text
 
         course_objectives_under = soup.find('h4', string='Course objectives').find_next_sibling()
-        modules_above = soup.find('h4', string='Course modules').find_previous_sibling()
-
         course_objectives = self._clean(course_objectives_under.text)
-        ul = self._clean(modules_above.text)
-        if ul != course_objectives:
-            course_objectives += ' ' + ul
+
+        modules_above = soup.find('h4', string='Course modules')
+        if modules_above:
+            modules_above = modules_above.find_previous_sibling()
+            ul = self._clean(modules_above.text)
+            if ul != course_objectives:
+                course_objectives += ' ' + ul
 
         div = soup.find('div', id='course-module-accordion-control')
         ms = div.find_all('div', class_='accordion-item')
@@ -339,6 +341,10 @@ class Certificate(Source):
             "prerequisites": self.prereq,
             "study_materials": '\n'.join(self.study_materials)
         })
+        certificate_dict.update(
+            self._get_all_exam_details()
+        )
+        
         return certificate_dict
     
 class Study(Source):

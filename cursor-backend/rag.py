@@ -12,6 +12,8 @@ from openai import OpenAI
 import chromadb
 from sentence_transformers import SentenceTransformer
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
 
 # Load environment variables
 load_dotenv()
@@ -64,7 +66,15 @@ class SimpleAgenticRAG:
         
         # Chat history
         self.chat_history: List[ChatMessage] = []
-        
+        self.user_profile = None  # Store user profile from survey
+
+    def set_user_profile(self, profile_dict: dict):
+        """Set the user profile from survey data."""
+        self.user_profile = profile_dict
+
+    def get_user_profile(self):
+        return self.user_profile
+
     def load_resources(self) -> Dict[str, Any]:
         """Load resources from JSON file."""
         with open('resources.json', 'r', encoding='utf-8') as f:
@@ -106,9 +116,9 @@ class SimpleAgenticRAG:
         """Set up the vector store with documents."""
         try:
             self.collection = self.chroma_client.get_collection("adobe_resources")
-            print("✅ Loaded existing vector database")
+            print("Loaded existing vector database")
         except:
-            print("🔄 Creating new vector database...")
+            print("Creating new vector database...")
             self.collection = self.chroma_client.create_collection("adobe_resources")
             
             documents = self.create_documents()
@@ -120,7 +130,7 @@ class SimpleAgenticRAG:
                     ids=[doc['id']]
                 )
             
-            print("✅ Vector database created successfully!")
+            print("Vector database created successfully!")
     
     def decompose_query(self, query: str) -> List[str]:
         """Decompose complex queries into simpler sub-queries."""
@@ -147,6 +157,7 @@ Output: ["What Adobe Analytics courses are available?", "What are the prerequisi
             
             # Parse JSON response
             content = response.choices[0].message.content
+            print(f"decompose_query content: {content}")
             if content and content.strip().startswith('[') and content.strip().endswith(']'):
                 return json.loads(content.strip())
             else:
@@ -263,39 +274,62 @@ You can help users with:
 
 IMPORTANT: Always reference the conversation history when relevant. If the user refers to previous questions or asks follow-up questions, use the context from earlier in the conversation to provide more relevant and contextual answers.
 
+If the user asks about your capabilities, limitations, or how you work, explain that you are an AI-powered assistant for Adobe learning and certification. Describe your main features (course/cert search, learning path graph, survey for personalization), what you’re best at, and what you cannot do (e.g., register for exams, provide official support, answer non-Adobe questions). Be clear, concise, and helpful.
+
 Always provide accurate, helpful information based on the available resources. If you're unsure about something, say so rather than making up information."""
     
     def create_context_prompt(self, query: str, relevant_docs: List[Dict], chat_context: str = "") -> str:
-        """Create a context prompt with relevant documents and chat history."""
-        context = "Based on the following Adobe resources information and conversation context, please answer the user's question:\n\n"
-        
+        """Create a context prompt with relevant documents, user profile, and chat history."""
+        context = "Based on the following Adobe resources information, user profile, and conversation context, please answer the user's question:\n\n"
+        if self.user_profile:
+            context += f"User profile: {json.dumps(self.user_profile, indent=2)}\n\n"
         if chat_context:
             context += f"{chat_context}\n\n"
-        
         for i, doc in enumerate(relevant_docs, 1):
             context += f"Resource {i}:\n{doc['content']}\n\n"
-        
         context += f"User Question: {query}\n\n"
-        context += "Please provide a comprehensive answer based on the information above. If the information isn't available in the provided resources, please say so. If this is a follow-up question, reference the conversation context appropriately. Please answer in HTML format."
-        
+        context += "Please provide a comprehensive answer based on the information above. If the information isn't available in the provided resources, please say so. If this is a follow-up question, reference the conversation context appropriately. Please answer in an HTML body, beginning with <html> and ending with </html>."
         return context
     
     def get_response(self, query: str) -> str:
         """Get response from the agentic RAG system."""
         try:
             # Get chat context
+            start_time = time.time()
             chat_context = self.get_chat_context()
+            print(f"A: {time.time() - start_time}")
             
             # Decompose complex queries
+            start_time = time.time()
             sub_queries = self.decompose_query(query)
+            print(f"B: {time.time() - start_time}")
+            print(f"sub_queries: {sub_queries}")
+            if not sub_queries or not isinstance(sub_queries, list):
+                print("sub_queries is empty or not a list! Falling back to original query.")
+                sub_queries = [query]
             
-            # Search for relevant documents with reasoning
+            # Search for relevant documents with reasoning in parallel
+            start_time = time.time()
             all_relevant_docs = []
-            for sub_query in sub_queries:
-                docs = self.search_with_reasoning(sub_query, n_results=3)
-                all_relevant_docs.extend(docs)
-            
+            with ThreadPoolExecutor(max_workers=min(len(sub_queries), 5)) as executor:
+                # Submit all search tasks
+                future_to_query = {
+                    executor.submit(self.search_with_reasoning, sub_query, 3): sub_query 
+                    for sub_query in sub_queries
+                }
+                
+                # Collect results as they complete
+                for future in as_completed(future_to_query):
+                    try:
+                        docs = future.result()
+                        all_relevant_docs.extend(docs)
+                    except Exception as e:
+                        print(f"Warning: Search failed for a sub-query: {e}")
+                        continue
+            print(f"C: {time.time() - start_time}")
+
             # Remove duplicates based on content
+            start_time = time.time()
             seen_contents = set()
             unique_docs = []
             for doc in all_relevant_docs:
@@ -306,8 +340,10 @@ Always provide accurate, helpful information based on the available resources. I
             
             # Limit to top 5 most relevant
             unique_docs = unique_docs[:5]
-            
+            print(f"D: {time.time() - start_time}")
+
             # Create context prompt
+            start_time = time.time()
             context_prompt = self.create_context_prompt(query, unique_docs, chat_context)
             
             # Get response from OpenAI
@@ -317,18 +353,37 @@ Always provide accurate, helpful information based on the available resources. I
                     {"role": "system", "content": self.create_system_prompt()},
                     {"role": "user", "content": context_prompt}
                 ],
-                max_tokens=1000,
+                max_tokens=800,
                 stream=True,
                 temperature=0.7
             )
-            
+            print(f"E: {time.time() - start_time}")
+
+            full_response = ""
             for chunk in response:
                 if chunk.choices[0].delta.content:
                     token = chunk.choices[0].delta.content
-                    yield token
+                    full_response += token
+                    if token not in ["html", "```"]:
+                        yield token
+            
+            # Extract courses/certificates from the full response
+            extracted_items = self.extract_courses_certificates(full_response)
+            if extracted_items:
+                print(f"Extracted courses/certificates: {extracted_items}")
+                # Store for later use in graph generation
+                self.last_extracted_items = extracted_items
+            else:
+                print(f"no Extracted courses/certificates :(")
+                self.last_extracted_items = []
             
         except Exception as e:
+            print(f"Exception in get_response after B: {e}")
             return f"Error: {str(e)}"
+    
+    def get_last_extracted_items(self) -> List[str]:
+        """Get the last extracted course/certificate items."""
+        return getattr(self, 'last_extracted_items', [])
     
     def add_message(self, role: str, content: str, metadata: Dict = None):
         """Add a message to chat history."""
@@ -358,6 +413,43 @@ Always provide accurate, helpful information based on the available resources. I
         except:
             return ""
     
+    def extract_courses_certificates(self, response_text: str) -> List[str]:
+        """Extract course and certificate names from the RAG response."""
+        try:
+            # Use OpenAI to extract course/certificate names from the response
+            extraction_prompt = f"""
+            Extract Adobe course and certificate names from the following response text.
+            Return only the names as a JSON array of strings. If no courses or certificates are mentioned, return an empty array.
+            
+            Response text:
+            {response_text}
+            
+            Return format: ["Course Name 1", "Certificate Name 2", ...]
+            """
+            
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are an expert at extracting Adobe course and certificate names from text. Return only valid Adobe course/certificate names as a JSON array."},
+                    {"role": "user", "content": extraction_prompt}
+                ],
+                max_tokens=200,
+                temperature=0.1
+            )
+            
+            content = response.choices[0].message.content.replace("`", "").replace("json", "")
+            print(f"Extracted courses/certificates: {content}")
+            if content and content.strip().startswith('[') and content.strip().endswith(']'):
+                extracted_names = json.loads(content.strip())
+                # Filter out any non-string items and clean up
+                cleaned_names = [name.strip() for name in extracted_names if isinstance(name, str) and name.strip()]
+                return cleaned_names
+            else:
+                return []
+        except Exception as e:
+            print(f"Error extracting courses/certificates: {e}")
+            return []
+    
     def get_resource_summary(self) -> Dict[str, Any]:
         """Get a summary of available resources."""
         summary = {
@@ -383,9 +475,58 @@ Always provide accurate, helpful information based on the available resources. I
         
         return summary
 
+    def analyze_graph_parameters(self, extracted_items: list, user_query: str) -> dict:
+        """Use OpenAI to determine relevant_roles, info_level, and resource_type for graph generation."""
+        prompt = f'''
+Given the following extracted Adobe course/certificate names and the user query, select the most relevant job roles (from: Developer, Business Practitioner, Architect, All; you may select more than one), the appropriate info level for a graph visualization (choose one: low, medium, high), and the resource type (choose one: course, certificate, both).
+
+Return a JSON object with:
+- "relevant_roles": list of roles
+- "info_level": one of "low", "medium", "high"
+- "resource_type": one of "course", "certificate", "both"
+
+Extracted items: {extracted_items}
+User query: "{user_query}"
+
+Return format:
+{{
+  "relevant_roles": ["Developer"],
+  "info_level": "medium",
+  "resource_type": "both"
+}}
+'''
+        try:
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are an expert at analyzing Adobe learning pathways and graph visualization needs."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=200,
+                temperature=0.1
+            )
+            content = response.choices[0].message.content.replace("`", "").replace("json", "")
+            print(f"AI-selected relevant_roles/info_level/resource_type: {content}")
+            if content and content.strip().startswith('{'):
+                result = json.loads(content.strip())
+                valid_roles = {"Developer", "Business Practitioner", "Architect", "All"}
+                roles = [r for r in result.get("relevant_roles", []) if r in valid_roles]
+                info_level = result.get("info_level", "medium")
+                if info_level not in ["low", "medium", "high"]:
+                    info_level = "medium"
+                resource_type = result.get("resource_type", "both")
+                if resource_type not in ["course", "certificate", "both"]:
+                    resource_type = "both"
+                return {"relevant_roles": roles or ["All"], "info_level": info_level, "resource_type": resource_type}
+            else:
+                return {"relevant_roles": ["All"], "info_level": "medium", "resource_type": "both"}
+        except Exception as e:
+            print(f"Error in analyze_graph_parameters: {e}")
+            return {"relevant_roles": ["All"], "info_level": "medium", "resource_type": "both"}
+
 def main():
     """Main function for the command-line interface."""
-    print("🎓 Adobe Resources Expert - Agentic RAG (Command Line)")
+    print("Adobe Resources Expert - Agentic RAG (Command Line)")
     print("=" * 60)
     
     # Initialize RAG system
@@ -394,12 +535,12 @@ def main():
     
     # Show resource summary
     summary = rag_system.get_resource_summary()
-    print(f"\n📊 Resource Summary:")
+    print(f"\nResource Summary:")
     print(f"   Total Resources: {summary['total_resources']}")
     print(f"   Types: {', '.join(summary['by_type'].keys())}")
     print(f"   Levels: {', '.join(summary['by_level'].keys())}")
     
-    print("\n💡 Example questions:")
+    print("\nExample questions:")
     print("   - What Adobe Analytics courses are available?")
     print("   - Tell me about Adobe Commerce certifications")
     print("   - What are the prerequisites for Expert level certifications?")
@@ -412,14 +553,14 @@ def main():
     # Chat loop
     while True:
         try:
-            query = input("\n🤖 You: ").strip()
+            query = input("You: ").strip()
             
             if query.lower() in ['quit', 'exit', 'bye', 'q']:
-                print("👋 Goodbye! Happy learning!")
+                print("Goodbye! Happy learning!")
                 break
             
             if query.lower() in ['history', 'h']:
-                print("\n📜 Chat History:")
+                print("\nChat History:")
                 for i, msg in enumerate(rag_system.chat_history[-5:], 1):
                     role = "User" if msg.role == "user" else "Assistant"
                     print(f"{i}. {role}: {msg.content[:100]}...")
@@ -428,14 +569,14 @@ def main():
             if query.lower() in ['summary', 's']:
                 summary = rag_system.get_chat_summary()
                 if summary:
-                    print(f"\n📋 Conversation Summary: {summary}")
+                    print(f"\nConversation Summary: {summary}")
                 else:
-                    print("\n📋 No conversation history to summarize.")
+                    print("\nNo conversation history to summarize.")
                 continue
             
             if query.lower() in ['clear', 'c']:
                 rag_system.chat_history = []
-                print("\n🗑️ Chat history cleared!")
+                print("\nChat history cleared!")
                 continue
             
             if not query:
@@ -444,19 +585,19 @@ def main():
             # Add user message to history
             rag_system.add_message("user", query)
             
-            print("🤔 Thinking with advanced reasoning...")
+            print("Thinking with advanced reasoning...")
             response = rag_system.get_response(query)
             
             # Add assistant response to history
             rag_system.add_message("assistant", response)
             
-            print(f"\n🎓 Assistant: {response}")
+            print(f"\nAssistant: {response}")
             
         except KeyboardInterrupt:
-            print("\n👋 Goodbye! Happy learning!")
+            print("\nGoodbye! Happy learning!")
             break
         except Exception as e:
-            print(f"❌ Error: {e}")
+            print(f"Error: {e}")
 
 if __name__ == "__main__":
     main() 

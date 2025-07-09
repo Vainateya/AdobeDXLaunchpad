@@ -4,7 +4,9 @@ from bs4 import BeautifulSoup
 import numpy as np
 import re
 import os
-        
+import pickle
+import json
+
 class Module(NamedTuple):
     title: str
     description: str
@@ -15,13 +17,26 @@ def mod_to_dict(mod: Module):
 def mod_to_text(mod: Module):
     return mod.title + ": " + mod.description
 
+def save_sources_pickle(sources, filename):
+    with open(filename, 'wb') as f:
+        pickle.dump(sources, f)
+
+def load_sources_pickle(filename):
+    with open(filename, 'rb') as f:
+        sources = pickle.load(f)
+    return sources
+
+def get_certificate_and_study(filename):
+    cert = Certificate(filename)
+
 class Source:
-    def __init__(self, category: str, level: str, job_role: str, display: str, all_text):
+    def __init__(self, category: str, level: str, job_role: str, display: str, all_text: str, link: str = ''):
         self.category = category
         self.level = level
         self.job_role = job_role
         self.display = display
         self.all_text = all_text
+        self.link = link
         self.course_levels = ['Foundations', 'Professional', 'Expert']
         self.certificate_levels = ['Professional', 'Expert', 'Master']
         self.job_roles = ['Developer', 'Business Practitioner', 'Architect', 'All']
@@ -64,6 +79,7 @@ class Source:
             "level": self.level,
             "job_role": self.job_role,
             "display": self.display,
+            "link": self.link
             # "all_text": self.all_text
         }
 
@@ -75,29 +91,51 @@ class Course(Source):
         r = requests.get(link)
         soup = BeautifulSoup(r.content, 'html.parser')
 
-        div = soup.find('div', class_='table-responsive mb-0 mb-xl-4')
-        rows = div.find('tbody').find('tr').find_all('td')
+        # Safely find the course metadata table
+        table = soup.find('div', class_='table-responsive mb-0 mb-xl-4')
+        header_cells = table.find('thead').find('tr').find_all('th')
+        data_cells = table.find('tbody').find('tr').find_all('td')
 
-        application = self._clean(rows[0].text)
-        level = self._clean(rows[1].text)
-        job_role = self._clean(rows[2].text)
-        course_number = self._clean(rows[3].text)
-        points = int(self._clean(rows[4].text))
-        time = self._clean(rows[5].text)
-        num_modules = int(self._clean(rows[6].text))
+        # Map column headers to their corresponding data
+        columns = [self._clean(th.text).lower() for th in header_cells]
+        values = [self._clean(td.text) for td in data_cells]
+        row_data = dict(zip(columns, values))
+
+        # Extract values using column names (order-safe and missing-column-safe)
+        application = row_data.get('application', '')
+        level = row_data.get('level', '')
+        job_role = row_data.get('job role', '')
+        course_number = row_data.get('course number', '')
+
+        points_str = row_data.get('points', '')
+        points = int(re.search(r'\d+', points_str).group()) if re.search(r'\d+', points_str) else 0
+
+        time = row_data.get('time', '')
+        num_modules_str = row_data.get('modules', '')
+        num_modules = int(re.search(r'\d+', num_modules_str).group()) if re.search(r'\d+', num_modules_str) else 0
+
 
         if job_role != 'All':
             job_role = job_role[:-1]
 
         display = soup.find('h1', class_='text-white').text
 
-        course_objectives_under = soup.find('h4', string='Course objectives').find_next_sibling()
-        modules_above = soup.find('h4', string='Course modules').find_previous_sibling()
+        course_objectives_under = soup.find('h4', string='Course objectives')
+        course_objectives = ""
 
-        course_objectives = self._clean(course_objectives_under.text)
-        ul = self._clean(modules_above.text)
-        if ul != course_objectives:
-            course_objectives += ' ' + ul
+        if course_objectives_under and course_objectives_under.find_next_sibling():
+            course_objectives = self._clean(course_objectives_under.find_next_sibling().text)
+
+        modules_above_tag = soup.find('h4', string='Course modules')
+        modules_above = ""
+
+        if modules_above_tag and modules_above_tag.find_previous_sibling():
+            modules_above = self._clean(modules_above_tag.find_previous_sibling().text)
+
+        if modules_above and modules_above != course_objectives:
+            course_objectives += ' ' + modules_above
+
+        self.objectives = course_objectives
 
         div = soup.find('div', id='course-module-accordion-control')
         ms = div.find_all('div', class_='accordion-item')
@@ -112,7 +150,7 @@ class Course(Source):
 
             modules.append(Module(title=title, description=desc))
 
-        super().__init__(application, level, job_role, display, soup.text)
+        super().__init__(application, level, job_role, display, soup.text, link)
         self.course_number = course_number
         self.points = points
         self.time = time
@@ -130,10 +168,13 @@ class Course(Source):
     def is_prereq_to(self, other_source):
         if self.category != other_source.category:
             return False
+        
         if type(other_source) == Certificate:
             return self.certificate_levels.index(other_source.level) >= self.course_levels.index(self.level)
-        else:
+        elif type(other_source) == Course:
             return self.course_levels.index(other_source.level) == self.course_levels.index(self.level) + 1
+        else:
+            return False
     
     def to_dict(self):
         """Convert the Course object to a dictionary."""
@@ -171,7 +212,21 @@ class Certificate(Source):
 
         display = self._clean(self.soup.find('h1', class_='text-white').text)
         
-        super().__init__(name, level, job_role, display, self.soup.text)
+        try:
+            base_tag = self.soup.find('base', href=True)
+            if base_tag:
+                href = base_tag['href'].strip('/')
+                if href.startswith("certification/"):
+                    self.link = f"https://certification.adobe.com/{href}"
+                else:
+                    self.link = f"https://certification.adobe.com/certification/{href}"
+            else:
+                self.link = None
+        except Exception:
+            self.link = None
+
+        
+        super().__init__(name, level, job_role, display, self.soup.text, link=self.link)
 
         self.prereq = ', '.join(self._get_min_exp_rec())
         self.type = "certificate"
@@ -187,6 +242,7 @@ class Certificate(Source):
                 details += detail + ', '
             study_materials_parsed[-1] += details
         self.study_materials = study_materials_parsed
+        self.study = Study(self)
 
     def get_embedding(self, model):
         relevant_text = [self.prereq] + [i for i in self.study_materials]
@@ -199,8 +255,10 @@ class Certificate(Source):
             return False
         if type(other_source) == Course:
             return self.course_levels.index(other_source.level) >= self.certificate_levels.index(self.level) + 1
-        else:
+        elif type(other_source) == Certificate:
             return self.certificate_levels.index(other_source.level) == self.certificate_levels.index(self.level) + 1
+        else:
+            return False
 
     def _rem_big_spaces(self, text):
         text = text.replace("\n", "")
@@ -297,3 +355,13 @@ class Certificate(Source):
             "study_materials": '\n'.join(self.study_materials)
         })
         return certificate_dict
+    
+class Study(Source):
+    def __init__(self, cert: Certificate):
+        link = cert.link
+        if '?' in link:
+            link += '&tab=certificate4'
+        else:
+            link += '?tab=certificate4'
+        super().__init__(cert.category, cert.level, cert.job_role, cert.display + ' Study Materials', cert.all_text, link)
+        self.type = "study"
